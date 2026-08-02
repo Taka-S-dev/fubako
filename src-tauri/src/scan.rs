@@ -1,6 +1,7 @@
 use crate::model::{AppConfig, Status, Task, TaskMeta};
 use chrono::{DateTime, Duration, Local, NaiveDate, TimeZone};
 use std::fs;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
@@ -13,8 +14,10 @@ pub fn read_meta(dir: &Path) -> TaskMeta {
         .unwrap_or_default()
 }
 
-/// 一時ファイルへ書いてから rename で置き換えるアトミック書き込み。
-/// 書き込み途中でプロセスが落ちても既存ファイルは壊れない
+/// 一時ファイルへ書き切ってから rename で置き換えるアトミック書き込み。
+/// Rust の `fs::rename` は Windows では MOVEFILE_REPLACE_EXISTING 付きで
+/// 呼ばれるため既存ファイルを上書きでき、置き換えの前に消す必要はない。
+/// 先に消すと「旧ファイルが無く新ファイルもまだ無い」瞬間ができてしまう
 pub fn atomic_write(path: &Path, data: &[u8]) -> Result<(), String> {
     let file_name = path
         .file_name()
@@ -22,12 +25,19 @@ pub fn atomic_write(path: &Path, data: &[u8]) -> Result<(), String> {
         .to_string_lossy()
         .to_string();
     let tmp = path.with_file_name(format!("{file_name}.tmp"));
-    fs::write(&tmp, data).map_err(|e| e.to_string())?;
-    // Windows の rename は上書き不可のため既存ファイルを先に外す
-    if path.exists() {
-        fs::remove_file(path).map_err(|e| e.to_string())?;
+    {
+        let mut file = fs::File::create(&tmp).map_err(|e| e.to_string())?;
+        file.write_all(data).map_err(|e| e.to_string())?;
+        // 置き換える前に中身をディスクへ確定させる。これが無いと、
+        // rename 後に電源が落ちた場合に空のファイルだけが残り得る
+        file.sync_all().map_err(|e| e.to_string())?;
     }
-    fs::rename(&tmp, path).map_err(|e| e.to_string())
+    if let Err(e) = fs::rename(&tmp, path) {
+        // 置き換えられなかったときは書きかけを残さない。既存ファイルは無傷
+        let _ = fs::remove_file(&tmp);
+        return Err(e.to_string());
+    }
+    Ok(())
 }
 
 pub fn write_meta(dir: &Path, meta: &TaskMeta) -> Result<(), String> {
@@ -380,5 +390,26 @@ mod tests {
         write_meta(dir.path(), &meta).unwrap();
         let task = scan_task(dir.path(), false, 14).unwrap();
         assert_eq!(task.progress, Some(50));
+    }
+
+    #[test]
+    fn atomic_write_replaces_existing_content_without_a_gap() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("data.json");
+        fs::write(&path, b"OLD").unwrap();
+
+        atomic_write(&path, b"NEW").unwrap();
+
+        assert_eq!(fs::read_to_string(&path).unwrap(), "NEW");
+        // 置き換えは rename 一発。書きかけの一時ファイルは残らない
+        assert!(!dir.path().join("data.json.tmp").exists());
+    }
+
+    #[test]
+    fn atomic_write_creates_a_missing_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("data.json");
+        atomic_write(&path, b"NEW").unwrap();
+        assert_eq!(fs::read_to_string(&path).unwrap(), "NEW");
     }
 }
