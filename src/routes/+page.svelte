@@ -321,10 +321,17 @@
     await handleSaveSettings({ ...config, work_root: obWork, archive_root: obArchive }, autostart);
   }
 
+  function clearQuery() {
+    query = '';
+    searchEl?.focus();
+  }
+
   function onKeydown(e: KeyboardEvent) {
     if (e.key === 'Escape') {
       if (showCreate) showCreate = false;
       else if (showSettings) showSettings = false;
+      // 絞り込み中はまず解除する（フィルタバーの案内と一致させる）
+      else if (query) clearQuery();
       else if (selectedPath) selectedPath = null;
       return;
     }
@@ -463,13 +470,14 @@
     <div class="search-wrap">
       <input
         class="search"
+        class:filtering={!!query}
         bind:this={searchEl}
         bind:value={query}
         placeholder="検索: 名前・タグ・メモ・日付   (Ctrl+F)"
         disabled={!configured}
       />
       {#if query}
-        <button class="clear" onclick={() => (query = '')} aria-label="検索をクリア">✕</button>
+        <button class="clear" onclick={clearQuery} aria-label="絞り込みを解除" title="絞り込みを解除 (Esc)">✕</button>
       {/if}
     </div>
     <div class="top-actions">
@@ -496,6 +504,17 @@
       </button>
     </div>
   </header>
+
+  {#if loaded && configured && query.trim()}
+    <div class="filter-bar" role="status">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z" />
+      </svg>
+      <span class="filter-term">「{query}」で絞り込み中</span>
+      <span class="filter-count">{tasks.length} 件中 {filtered.length} 件</span>
+      <button class="filter-clear" onclick={clearQuery}>絞り込みを解除 (Esc)</button>
+    </div>
+  {/if}
 
   {#if !loaded}
     <div class="center-note">読み込み中…</div>
@@ -669,6 +688,44 @@
     background: var(--surface);
     outline: 2px solid var(--focus);
     outline-offset: -1px;
+  }
+  .search.filtering {
+    background: var(--manila-soft);
+    border-color: var(--manila);
+    color: var(--ink);
+    font-weight: 600;
+  }
+
+  /* 絞り込み中であることと、解除方法を常に見える場所に出す */
+  .filter-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: none;
+    padding: 7px 16px;
+    background: var(--manila-soft);
+    border-bottom: 1px solid var(--manila);
+    color: #7a5310;
+    font-size: 12.5px;
+  }
+  .filter-term {
+    font-weight: 700;
+  }
+  .filter-count {
+    color: var(--ink-2);
+  }
+  .filter-clear {
+    margin-left: auto;
+    border: 1px solid var(--manila);
+    background: var(--surface);
+    color: #7a5310;
+    border-radius: 99px;
+    padding: 3px 12px;
+    font-size: 11.5px;
+  }
+  .filter-clear:hover {
+    background: var(--manila);
+    color: #fff;
   }
   .clear {
     position: absolute;
