@@ -72,7 +72,7 @@ export function collectTags(tasks: Task[]): string[] {
 }
 
 /** 入力中の最後の語がタグなら、その途中の文字列を返す */
-export function activeTagPartial(query: string): string | null {
+function activeTagPartial(query: string): string | null {
   const tokens = query.split(/\s+/);
   return tagPart(tokens[tokens.length - 1] ?? '');
 }
