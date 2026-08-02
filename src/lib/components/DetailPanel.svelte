@@ -250,6 +250,8 @@
         <span>{fmtDateTime(task.completed_at)}</span>
       </div>
     {/if}
+    <!-- アーカイブ済みは完了日が状態を語るため、空の進捗操作は出さない -->
+    {#if !task.archived}
     <div class="row progress-row">
       <span class="label">進捗</span>
       <div class="p-body">
@@ -320,6 +322,7 @@
         {/if}
       </div>
     </div>
+    {/if}
     <div class="row">
       <span class="label">タグ</span>
       <input
@@ -346,7 +349,7 @@
 
   <section class="checklist">
     <h3>やること</h3>
-    {#if checklist.length === 0}
+    {#if checklist.length === 0 && !task.archived}
       <p class="hint">追加すると、消化状況から進捗を自動計算します</p>
     {/if}
 
