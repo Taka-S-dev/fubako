@@ -100,11 +100,21 @@
   let tagFocused = $state(false);
   let tagHighlight = $state(-1);
 
+  const SUGGEST_LIMIT = 6;
+
+  // タグが増えても一覧が長くならないよう、頻度順の上位だけを出す。
+  // 絞り込み時は前方一致を優先し、打った文字で始まるタグが埋もれないようにする
   const suggestions = $derived.by(() => {
     const q = tagInput.trim().toLowerCase();
-    return alltags
-      .filter((t) => !tags.includes(t) && (!q || t.toLowerCase().includes(q)))
-      .slice(0, 6);
+    const pool = alltags.filter((t) => !tags.includes(t));
+    if (!q) return pool.slice(0, SUGGEST_LIMIT);
+    return pool
+      .filter((t) => t.toLowerCase().includes(q))
+      .sort(
+        (a, b) =>
+          Number(b.toLowerCase().startsWith(q)) - Number(a.toLowerCase().startsWith(q))
+      )
+      .slice(0, SUGGEST_LIMIT);
   });
 
   function addTag(raw: string) {
