@@ -113,3 +113,9 @@ npm run tauri build  # インストーラー作成 (src-tauri/target/release/bun
 ```
 
 進捗率は保存せず、やることと見積から表示のたびに導出します。保存されるのは事実（何が済んだか・見積は何分か）だけです。
+
+## ライセンス
+
+[MIT License](LICENSE) — Copyright (c) 2026 Taka-S-dev
+
+UI のアイコンは [Feather Icons](https://feathericons.com/)（MIT）および、その派生である [Lucide](https://lucide.dev/)（ISC）のパスに基づいています。アプリアイコンは自作です。
