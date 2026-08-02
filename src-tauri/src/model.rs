@@ -78,8 +78,9 @@ pub struct Task {
     pub created_at: Option<String>,
     pub completed_at: Option<String>,
     pub last_activity: Option<String>,
+    /// フォルダ直下の項目数
     pub file_count: usize,
-    /// フォルダ直下のファイル・フォルダ名（検索用）
+    /// 検索用のファイル・フォルダ名。サブフォルダの中も `資料\仕様書.xlsx` の形で含む
     pub file_names: Vec<String>,
     pub stale: bool,
 }

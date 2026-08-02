@@ -100,21 +100,49 @@ fn newest_mtime(dir: &Path, depth: u32, budget: &mut u32) -> Option<SystemTime> 
     newest
 }
 
+/// 検索用に名前を集めるときに降りる深さ。詳細パネルの一覧と揃えてある
+const SEARCH_MAX_DEPTH: u32 = 3;
+/// 集める名前の上限。全タスク分をメモリに載せるため、一覧より辛めにする
+const SEARCH_MAX_NAMES: usize = 300;
+
+/// フォルダ内の名前を再帰的に集める。サブフォルダの中身は
+/// `資料\仕様書.xlsx` の形で入れるので、フォルダ名でもファイル名でも引ける。
+/// 戻り値は直下の項目数で、カードに出す「N 項目」に使う
+fn collect_names(dir: &Path, prefix: &str, depth: u32, out: &mut Vec<String>) -> usize {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return 0;
+    };
+    let mut here = 0;
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().to_string();
+        if name.starts_with(META_FILE) {
+            continue;
+        }
+        here += 1;
+        if out.len() >= SEARCH_MAX_NAMES {
+            continue;
+        }
+        let rel = if prefix.is_empty() {
+            name
+        } else {
+            format!("{prefix}\\{name}")
+        };
+        let is_dir = entry.file_type().is_ok_and(|t| t.is_dir());
+        out.push(rel.clone());
+        if is_dir && depth + 1 < SEARCH_MAX_DEPTH {
+            collect_names(&entry.path(), &rel, depth + 1, out);
+        }
+    }
+    here
+}
+
 pub fn scan_task(dir: &Path, archived: bool, stale_days: u32) -> Option<Task> {
     let folder_name = dir.file_name()?.to_string_lossy().to_string();
     let (date_prefix, name) = parse_folder_name(&folder_name);
     let meta = read_meta(dir);
 
-    let file_names: Vec<String> = fs::read_dir(dir)
-        .map(|rd| {
-            rd.flatten()
-                .map(|e| e.file_name().to_string_lossy().to_string())
-                .filter(|n| !n.starts_with(META_FILE))
-                .take(300)
-                .collect()
-        })
-        .unwrap_or_default();
-    let file_count = file_names.len();
+    let mut file_names = Vec::new();
+    let file_count = collect_names(dir, "", 0, &mut file_names);
 
     let mut budget: u32 = 1000;
     let last_activity_time = newest_mtime(dir, 2, &mut budget)
@@ -403,6 +431,47 @@ mod tests {
         assert_eq!(fs::read_to_string(&path).unwrap(), "NEW");
         // 置き換えは rename 一発。書きかけの一時ファイルは残らない
         assert!(!dir.path().join("data.json.tmp").exists());
+    }
+
+    #[test]
+    fn search_names_reach_into_subfolders() {
+        let dir = tempfile::tempdir().unwrap();
+        let task = dir.path().join("20260802_調査");
+        fs::create_dir_all(task.join("資料").join("旧版")).unwrap();
+        fs::write(task.join("メモ.md"), b"x").unwrap();
+        fs::write(task.join("資料").join("仕様書.xlsx"), b"x").unwrap();
+        fs::write(task.join("資料").join("旧版").join("初稿.docx"), b"x").unwrap();
+        fs::write(task.join(META_FILE), b"{}").unwrap();
+
+        let mut names = Vec::new();
+        let count = collect_names(&task, "", 0, &mut names);
+        names.sort();
+        assert_eq!(
+            names,
+            vec![
+                "メモ.md",
+                "資料",
+                r"資料\仕様書.xlsx",
+                r"資料\旧版",
+                r"資料\旧版\初稿.docx",
+            ]
+        );
+        // カードの「N 項目」は直下だけを数える
+        assert_eq!(count, 2);
+    }
+
+    #[test]
+    fn search_names_stop_at_the_depth_limit() {
+        let dir = tempfile::tempdir().unwrap();
+        let task = dir.path().join("20260802_調査");
+        let deep = task.join("a").join("b").join("c");
+        fs::create_dir_all(&deep).unwrap();
+        fs::write(deep.join("奥.txt"), b"x").unwrap();
+
+        let mut names = Vec::new();
+        collect_names(&task, "", 0, &mut names);
+        names.sort();
+        assert_eq!(names, vec!["a", r"a\b", r"a\b\c"]);
     }
 
     #[test]
