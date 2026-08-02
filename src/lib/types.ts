@@ -49,6 +49,8 @@ export interface Task {
   stale: boolean;
 }
 
+export type ViewName = 'board' | 'list' | 'cal' | 'dash';
+
 export interface FolderEntry {
   /** タスクフォルダからの相対パス。サブフォルダの中身は `資料\仕様書.xlsx` のように入る */
   rel: string;
