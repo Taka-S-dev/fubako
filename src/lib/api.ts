@@ -29,6 +29,7 @@ export const api = {
         progress_mode: progressMode,
       },
     }),
+  renameTask: (path: string, name: string) => invoke<string>('rename_task', { path, name }),
   completeTask: (path: string) => invoke<string>('complete_task', { path }),
   importTask: (path: string) => invoke<Task>('import_task', { path }),
   deepArchiveTask: (path: string) => invoke<string>('deep_archive_task', { path }),

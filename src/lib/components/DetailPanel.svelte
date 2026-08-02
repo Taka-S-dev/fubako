@@ -12,6 +12,7 @@
     oncomplete,
     onreopen,
     ondeeparchive,
+    onrename,
     onsave,
   }: {
     task: Task;
@@ -23,6 +24,7 @@
     oncomplete: (t: Task) => void;
     onreopen: (t: Task) => void;
     ondeeparchive: (t: Task) => void;
+    onrename: (t: Task, name: string) => void;
     onsave: (
       t: Task,
       status: Status,
@@ -56,8 +58,34 @@
       manualProgress = task.manual_progress;
       progressMode = task.progress_mode;
       newItemText = '';
+      renaming = false;
     }
   });
+
+  // 名前の編集はフォルダ名そのものを変更する（表示名は持たない）
+  let renaming = $state(false);
+  let renameText = $state('');
+  let renameInput: HTMLInputElement | undefined = $state();
+
+  function startRename() {
+    renameText = task.name;
+    renaming = true;
+    queueMicrotask(() => renameInput?.select());
+  }
+
+  // Enter で確定すると入力欄が外れて blur も発火するため、二重実行を防ぐ
+  function commitRename() {
+    if (!renaming) return;
+    renaming = false;
+    const next = renameText.trim();
+    if (next && next !== task.name) onrename(task, next);
+  }
+
+  function onRenameKeydown(e: KeyboardEvent) {
+    e.stopPropagation();
+    if (e.key === 'Enter') commitRename();
+    if (e.key === 'Escape') renaming = false;
+  }
 
   const parsedTags = $derived(
     tagsText
@@ -143,7 +171,41 @@
       <span class="mono path" title={task.path}>{task.path}</span>
       <button class="icon-btn" onclick={onclose} title="閉じる (Esc)" aria-label="閉じる">✕</button>
     </div>
-    <h2>{task.name}</h2>
+    {#if renaming}
+      <div class="rename-row">
+        <input
+          class="field rename-input"
+          bind:this={renameInput}
+          bind:value={renameText}
+          onkeydown={onRenameKeydown}
+          onblur={commitRename}
+          aria-label="作業名"
+        />
+        <span class="rename-hint">
+          Enterで確定。フォルダ名{task.date_prefix ? 'の日付以降' : ''}が変わります
+        </span>
+      </div>
+    {:else}
+      <h2>
+        <span class="title-text">{task.name}</span>
+        <button class="rename-btn" onclick={startRename} title="名前を変更">
+          <svg
+            width="13"
+            height="13"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M12 20h9" />
+            <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+          </svg>
+        </button>
+      </h2>
+    {/if}
     <div class="actions">
       <button class="btn" onclick={() => onopen(task)}>エクスプローラーで開く</button>
       <button class="btn" onclick={() => oncopy(task)}>パスをコピー</button>
@@ -394,6 +456,46 @@
     font-size: 16px;
     line-height: 1.35;
     word-break: break-all;
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+  }
+  .title-text {
+    flex: 1;
+  }
+  .rename-btn {
+    flex: none;
+    border: none;
+    background: none;
+    color: var(--ink-3);
+    padding: 2px 4px;
+    border-radius: 4px;
+    line-height: 0;
+    opacity: 0;
+    transition: opacity 0.12s ease;
+  }
+  header:hover .rename-btn,
+  .rename-btn:focus-visible {
+    opacity: 1;
+  }
+  .rename-btn:hover {
+    color: var(--ink);
+    background: var(--surface-2);
+  }
+  .rename-row {
+    margin: 0 0 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .rename-input {
+    font-size: 15px;
+    font-weight: 600;
+    padding: 5px 9px;
+  }
+  .rename-hint {
+    font-size: 10.5px;
+    color: var(--ink-3);
   }
   .actions {
     display: flex;

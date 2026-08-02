@@ -62,6 +62,7 @@ pub fn run() {
             ops::list_tasks,
             ops::create_task,
             ops::set_task_meta,
+            ops::rename_task,
             ops::complete_task,
             ops::reopen_task,
             ops::import_task,

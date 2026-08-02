@@ -343,6 +343,16 @@
     }
   }
 
+  async function handleRename(task: Task, name: string) {
+    try {
+      const newPath = await api.renameTask(task.path, name);
+      selectedPath = newPath;
+      await refresh();
+    } catch (e) {
+      toast(String(e), 'error');
+    }
+  }
+
   async function handleDeepArchiveOne(task: Task) {
     const ok = await ask(
       `「${task.name}」をディープアーカイブへ移動します。\n移動後はアプリの表示・検索対象から外れます（フォルダを戻せば再登録されます）。`,
@@ -579,6 +589,7 @@
           oncomplete={handleComplete}
           onreopen={handleReopen}
           ondeeparchive={handleDeepArchiveOne}
+          onrename={handleRename}
           onsave={handleSaveMeta}
         />
       {/if}

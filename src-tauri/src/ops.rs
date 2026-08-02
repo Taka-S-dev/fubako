@@ -306,6 +306,58 @@ pub async fn set_task_meta(
     scan::write_meta(&dir, &meta)
 }
 
+/// フォルダ名の日付プレフィックスを維持したまま作業名部分だけ差し替える
+fn rename_folder(src: &Path, name: &str, current: &str) -> Result<PathBuf, String> {
+    let name = sanitize_name(name);
+    if name.is_empty() {
+        return Err("作業名を入力してください".to_string());
+    }
+    let parent = src.parent().ok_or("親フォルダを取得できません")?;
+    let folder_name = match scan::parse_folder_name(current).0 {
+        Some(prefix) => format!("{prefix}_{name}"),
+        None => name,
+    };
+    if folder_name == current {
+        return Ok(src.to_path_buf());
+    }
+    let dest = parent.join(&folder_name);
+    // Windows は大文字小文字を区別しないため、綴り違いだけの変更は衝突扱いにしない
+    let case_only = folder_name.to_lowercase() == current.to_lowercase();
+    if !case_only && dest.exists() {
+        return Err(format!("{folder_name} は既に存在します"));
+    }
+    fs::rename(src, &dest).map_err(|e| {
+        format!("名前を変更できませんでした。フォルダや中のファイルを開いていないか確認してください: {e}")
+    })?;
+    Ok(dest)
+}
+
+/// タスクフォルダ自体の名前を変更する。日付プレフィックスは維持し、
+/// 表示名とフォルダ名がずれないよう別名は持たせない
+#[tauri::command]
+pub async fn rename_task(
+    state: State<'_, AppState>,
+    path: String,
+    name: String,
+) -> Result<String, String> {
+    let config = state.config.lock().unwrap().clone();
+    let src = ensure_managed(Path::new(&path), &config)?;
+    let current = src
+        .file_name()
+        .ok_or("フォルダ名を取得できません")?
+        .to_string_lossy()
+        .to_string();
+    let dest = rename_folder(&src, &name, &current)?;
+    let new_name = dest.file_name().ok_or("フォルダ名を取得できません")?;
+    // canonicalize は Windows で `\\?\` 付きの表記を返す。一覧側のパスは
+    // 正規化前の表記なので、呼び出し元と同じ形に戻さないと選択が外れる
+    let plain = Path::new(&path)
+        .parent()
+        .map(|p| p.join(new_name))
+        .unwrap_or_else(|| dest.clone());
+    Ok(plain.to_string_lossy().to_string())
+}
+
 #[tauri::command]
 pub async fn complete_task(state: State<'_, AppState>, path: String) -> Result<String, String> {
     let config = state.config.lock().unwrap().clone();
@@ -573,8 +625,48 @@ mod tests {
         assert!(validate_roots(&ok).is_ok());
     }
 
+    #[test]
+    fn rename_keeps_date_prefix_and_sanitizes() {
+        let dir = tempfile::tempdir().unwrap();
+        let work = dir.path().join("work");
+        let src = work.join("20260802_調査");
+        fs::create_dir_all(&src).unwrap();
+        fs::write(src.join("a.txt"), "a").unwrap();
+        let config = AppConfig {
+            work_root: Some(work.to_string_lossy().into()),
+            ..Default::default()
+        };
+        let canon = ensure_managed(&src, &config).unwrap();
+        let current = canon.file_name().unwrap().to_string_lossy().to_string();
+        let renamed = rename_folder(&canon, "設計/レビュー", &current).unwrap();
+        assert_eq!(
+            renamed.file_name().unwrap().to_string_lossy(),
+            "20260802_設計_レビュー"
+        );
+        assert!(renamed.join("a.txt").exists());
+        assert!(!src.exists());
+    }
 
+    #[test]
+    fn rename_rejects_existing_name() {
+        let dir = tempfile::tempdir().unwrap();
+        let a = dir.path().join("20260802_a");
+        let b = dir.path().join("20260802_b");
+        fs::create_dir_all(&a).unwrap();
+        fs::create_dir_all(&b).unwrap();
+        let err = rename_folder(&a, "b", "20260802_a").unwrap_err();
+        assert!(err.contains("既に存在"), "unexpected: {err}");
+        assert!(a.exists());
+    }
 
+    #[test]
+    fn rename_without_prefix_replaces_whole_name() {
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path().join("メモ置き場");
+        fs::create_dir_all(&src).unwrap();
+        let renamed = rename_folder(&src, "資料置き場", "メモ置き場").unwrap();
+        assert_eq!(renamed.file_name().unwrap().to_string_lossy(), "資料置き場");
+    }
 
     // Windows は中のファイルが開かれているとフォルダ名を変更できない。
     // その際に元が壊れたり二重コピーが残ったりしないことを固定する
@@ -602,4 +694,17 @@ mod tests {
         assert!(leftovers.is_empty(), "temp folder left behind: {leftovers:?}");
     }
 
+    #[cfg(windows)]
+    #[test]
+    fn rename_reports_open_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path().join("20260802_調査");
+        fs::create_dir_all(&src).unwrap();
+        fs::write(src.join("open.txt"), "x").unwrap();
+        let _held = fs::File::open(src.join("open.txt")).unwrap();
+
+        let err = rename_folder(&src, "別名", "20260802_調査").unwrap_err();
+        assert!(err.contains("開いていないか"), "unexpected: {err}");
+        assert!(src.exists());
+    }
 }
