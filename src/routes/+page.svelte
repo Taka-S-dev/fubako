@@ -70,11 +70,30 @@
   });
   const selected = $derived(tasks.find((t) => t.path === selectedPath) ?? null);
 
+  // `#タグ名` はタグだけを対象にする。全角の ＃ も同じ扱い
+  const terms = $derived.by(() => {
+    const tags: string[] = [];
+    const text: string[] = [];
+    for (const token of query.trim().split(/\s+/).filter(Boolean)) {
+      if (token.startsWith('#') || token.startsWith('＃')) {
+        const tag = token.slice(1);
+        if (tag) tags.push(tag);
+      } else {
+        text.push(token);
+      }
+    }
+    return { tags, text };
+  });
+
   const filtered = $derived.by(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return tasks;
-    const words = q.split(/\s+/);
+    const { tags, text } = terms;
+    if (!tags.length && !text.length) return tasks;
+    const tagQueries = tags.map((t) => t.toLowerCase());
+    const words = text.map((t) => t.toLowerCase());
     return tasks.filter((t) => {
+      const taskTags = t.tags.map((tag) => tag.toLowerCase());
+      if (!tagQueries.every((q) => taskTags.some((tag) => tag.includes(q)))) return false;
+      if (!words.length) return true;
       const hay = [
         t.folder_name,
         t.name,
@@ -88,6 +107,14 @@
         .toLowerCase();
       return words.every((w) => hay.includes(w));
     });
+  });
+
+  const filterLabel = $derived.by(() => {
+    const { tags, text } = terms;
+    const parts: string[] = [];
+    if (tags.length) parts.push(`タグ「${tags.join('」「')}」`);
+    if (text.length) parts.push(`「${text.join(' ')}」`);
+    return `${parts.join(' かつ ')}で絞り込み中`;
   });
 
   function byActivity(a: Task, b: Task) {
@@ -484,7 +511,7 @@
         class:filtering={!!query}
         bind:this={searchEl}
         bind:value={query}
-        placeholder="検索: 名前・タグ・メモ・日付   (Ctrl+F)"
+        placeholder="検索: 名前・タグ・メモ・日付　　#タグ名 でタグだけに限定   (Ctrl+F)"
         disabled={!configured}
       />
       {#if query}
@@ -521,7 +548,7 @@
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z" />
       </svg>
-      <span class="filter-term">「{query}」で絞り込み中</span>
+      <span class="filter-term">{filterLabel}</span>
       <span class="filter-count">{tasks.length} 件中 {filtered.length} 件</span>
       <button class="filter-clear" onclick={clearQuery}>絞り込みを解除 (Esc)</button>
     </div>
