@@ -35,6 +35,7 @@ export const api = {
   deepArchiveTask: (path: string) => invoke<string>('deep_archive_task', { path }),
   reopenTask: (path: string) => invoke<string>('reopen_task', { path }),
   openInExplorer: (path: string) => invoke<void>('open_in_explorer', { path }),
+  openEntry: (path: string) => invoke<void>('open_entry', { path }),
   listFolder: (path: string) => invoke<FolderEntry[]>('list_folder', { path }),
   getAutostart: () => invoke<boolean>('get_autostart'),
   setAutostart: (enabled: boolean) => invoke<void>('set_autostart', { enabled }),

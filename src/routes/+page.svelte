@@ -410,6 +410,10 @@
     api.openInExplorer(task.path).catch((e) => toast(String(e), 'error'));
   }
 
+  function handleOpenEntry(task: Task, entry: FolderEntry) {
+    api.openEntry(`${task.path}\\${entry.name}`).catch((e) => toast(String(e), 'error'));
+  }
+
   async function handleSaveSettings(next: AppConfig, auto: boolean) {
     try {
       await api.setConfig(next);
@@ -785,6 +789,7 @@
           ondeeparchive={handleDeepArchiveOne}
           onrename={handleRename}
           onsave={handleSaveMeta}
+          onopenentry={handleOpenEntry}
         />
       {/if}
     </div>

@@ -505,6 +505,28 @@ pub async fn open_in_explorer(app: AppHandle, path: String) -> Result<(), String
         .map_err(|e| e.to_string())
 }
 
+/// フォルダの中身の項目を、拡張子の関連付けに従って開く。
+/// エディタを内蔵せず OS の既定アプリに委ねるので、`.md` はユーザーが
+/// 設定したエディタで開く。ディレクトリはエクスプローラーで開く
+#[tauri::command]
+pub async fn open_entry(
+    state: State<'_, AppState>,
+    app: AppHandle,
+    path: String,
+) -> Result<(), String> {
+    let config = state.config.lock().unwrap().clone();
+    let target = Path::new(&path);
+    ensure_managed(target, &config)?;
+    if target.is_dir() && crate::explorer::focus_existing_window(target) {
+        return Ok(());
+    }
+    // 正規化したパスは Windows で `\\?\` が付き関連付けを引けないため、
+    // 検証だけ正規化した実体で行い、開くのは受け取ったパスのまま
+    app.opener()
+        .open_path(path, None::<&str>)
+        .map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 pub async fn list_folder(
     state: State<'_, AppState>,
@@ -615,6 +637,27 @@ mod tests {
         assert!(ensure_managed(&sneaky, &config).is_err());
         // 存在しないパスも拒否
         assert!(ensure_managed(&work.join("なし"), &config).is_err());
+    }
+
+    #[test]
+    fn ensure_managed_accepts_files_inside_a_task() {
+        let dir = tempfile::tempdir().unwrap();
+        let work = dir.path().join("work");
+        let task = work.join("20260802_task");
+        fs::create_dir_all(&task).unwrap();
+        fs::write(task.join("メモ.md"), b"# note").unwrap();
+        fs::create_dir_all(task.join("資料")).unwrap();
+        fs::write(dir.path().join("outside.md"), b"x").unwrap();
+        let config = AppConfig {
+            work_root: Some(work.to_string_lossy().into()),
+            ..Default::default()
+        };
+        // タスク内のファイルとサブフォルダはどちらも開ける
+        assert!(ensure_managed(&task.join("メモ.md"), &config).is_ok());
+        assert!(ensure_managed(&task.join("資料"), &config).is_ok());
+        // 管理ルートの外にあるファイルは弾く
+        assert!(ensure_managed(&dir.path().join("outside.md"), &config).is_err());
+        assert!(ensure_managed(&task.join("..").join("..").join("outside.md"), &config).is_err());
     }
 
     #[test]

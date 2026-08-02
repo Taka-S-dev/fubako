@@ -69,6 +69,7 @@ pub fn run() {
             ops::import_task,
             ops::deep_archive_task,
             ops::open_in_explorer,
+            ops::open_entry,
             ops::list_folder,
             ops::get_autostart,
             ops::set_autostart,

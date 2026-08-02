@@ -15,6 +15,7 @@
     ondeeparchive,
     onrename,
     onsave,
+    onopenentry,
   }: {
     task: Task;
     entries: FolderEntry[];
@@ -38,6 +39,7 @@
       manualProgress: number | null,
       progressMode: ProgressMode
     ) => void;
+    onopenentry: (t: Task, entry: FolderEntry) => void;
   } = $props();
 
   let currentPath = $state('');
@@ -509,12 +511,18 @@
       <ul>
         {#each entries as entry (entry.name)}
           <li>
-            <span class="ficon">{entry.is_dir ? '▸' : '·'}</span>
-            <span class="fname" title={entry.name}>{entry.name}</span>
-            <span class="fmeta mono">
-              {entry.is_dir ? '' : fmtSize(entry.size)}
-            </span>
-            <span class="fmeta mono">{fmtDateTime(entry.modified).slice(5)}</span>
+            <button
+              class="frow"
+              onclick={() => onopenentry(task, entry)}
+              title={entry.is_dir ? `${entry.name} をエクスプローラーで開く` : `${entry.name} を開く`}
+            >
+              <span class="ficon">{entry.is_dir ? '▸' : '·'}</span>
+              <span class="fname">{entry.name}</span>
+              <span class="fmeta mono">
+                {entry.is_dir ? '' : fmtSize(entry.size)}
+              </span>
+              <span class="fmeta mono">{fmtDateTime(entry.modified).slice(5)}</span>
+            </button>
           </li>
         {/each}
       </ul>
@@ -962,12 +970,32 @@
     padding: 0;
   }
   .files li {
+    border-bottom: 1px solid var(--surface-2);
+  }
+  .frow {
     display: flex;
     align-items: center;
     gap: 7px;
+    width: 100%;
     padding: 4px 2px;
-    border-bottom: 1px solid var(--surface-2);
+    border: 0;
+    border-radius: 4px;
+    background: none;
+    font: inherit;
     font-size: 12px;
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+  .frow:hover {
+    background: var(--surface-2);
+  }
+  .frow:hover .fname {
+    text-decoration: underline;
+  }
+  .frow:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
   }
   .ficon {
     color: var(--manila);
