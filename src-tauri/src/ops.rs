@@ -21,6 +21,10 @@ pub struct MetaPatch {
     pub progress_mode: ProgressMode,
 }
 
+/// 別ボリューム間の移動を示す OS エラーコード
+/// (Windows: ERROR_NOT_SAME_DEVICE, Unix: EXDEV)
+const CROSS_VOLUME_ERRORS: [i32; 2] = [17, 18];
+
 fn sanitize_name(name: &str) -> String {
     name.trim()
         .chars()
@@ -43,8 +47,16 @@ fn move_dir(src: &Path, dest: &Path) -> Result<(), String> {
     if parent_c.starts_with(&src_c) {
         return Err("移動先が移動元フォルダの内側にあるため中止しました".to_string());
     }
-    if fs::rename(&src_c, dest).is_ok() {
-        return Ok(());
+    match fs::rename(&src_c, dest) {
+        Ok(()) => return Ok(()),
+        // 別ボリュームのときだけコピーで移動する。ファイルを開いている等の理由で
+        // 失敗したままコピーに進むと、削除できずフォルダが二重に残る
+        Err(e) if e.raw_os_error().is_some_and(|c| CROSS_VOLUME_ERRORS.contains(&c)) => {}
+        Err(e) => {
+            return Err(format!(
+                "フォルダを移動できませんでした。中のファイルを開いていないか確認してください: {e}"
+            ))
+        }
     }
     let tmp = dest.with_file_name(format!(".fubako-moving-{}", std::process::id()));
     if tmp.exists() {
@@ -63,7 +75,10 @@ fn move_dir(src: &Path, dest: &Path) -> Result<(), String> {
         ));
     }
     fs::remove_dir_all(&src_c).map_err(|e| {
-        format!("移動は完了しましたが、移動元の削除に失敗しました。手動で削除してください: {e}")
+        format!(
+            "移動先へのコピーは完了しましたが、移動元を削除できませんでした。\
+             同じフォルダが2箇所にあるため、移動元を手動で削除してください: {e}"
+        )
     })
 }
 
@@ -557,4 +572,34 @@ mod tests {
         };
         assert!(validate_roots(&ok).is_ok());
     }
+
+
+
+
+    // Windows は中のファイルが開かれているとフォルダ名を変更できない。
+    // その際に元が壊れたり二重コピーが残ったりしないことを固定する
+    #[cfg(windows)]
+    #[test]
+    fn move_dir_reports_open_files_instead_of_copying() {
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path().join("src");
+        fs::create_dir_all(&src).unwrap();
+        fs::write(src.join("open.txt"), "x").unwrap();
+        let _held = fs::File::open(src.join("open.txt")).unwrap();
+
+        let dest = dir.path().join("dest");
+        let err = move_dir(&src, &dest).unwrap_err();
+        assert!(err.contains("開いていないか"), "unexpected: {err}");
+        // 元は無傷、移動先も一時フォルダも残らない
+        assert_eq!(fs::read_to_string(src.join("open.txt")).unwrap(), "x");
+        assert!(!dest.exists());
+        let leftovers: Vec<_> = fs::read_dir(dir.path())
+            .unwrap()
+            .flatten()
+            .map(|e| e.file_name().to_string_lossy().to_string())
+            .filter(|n| n.starts_with(".fubako-moving"))
+            .collect();
+        assert!(leftovers.is_empty(), "temp folder left behind: {leftovers:?}");
+    }
+
 }
