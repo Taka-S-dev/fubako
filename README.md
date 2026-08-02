@@ -6,6 +6,12 @@
 
 <p align="center">作業フォルダを、そのままタスクに。</p>
 
+<p align="center">
+  <a href="https://github.com/Taka-S-dev/fubako/actions/workflows/ci.yml">
+    <img src="https://github.com/Taka-S-dev/fubako/actions/workflows/ci.yml/badge.svg" alt="CI" />
+  </a>
+</p>
+
 Fubako は、作業ディレクトリ内のフォルダをタスクとして管理する Windows 向け常駐アプリです。
 
 「作業ごとに `20260802_調査` のような日付フォルダを作り、資料をそこに集め、終わったらアーカイブへ移す」— この運用をエクスプローラーの手作業からそのまま引き継ぎ、カンバン・検索・進捗管理を上に載せています。

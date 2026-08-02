@@ -4,6 +4,7 @@
 
 # プロジェクト定義
 !/.gitignore
+!/.github/
 !/README.md
 !/LICENSE
 !/app-icon.png
