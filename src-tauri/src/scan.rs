@@ -145,13 +145,17 @@ pub fn scan_task(dir: &Path, archived: bool, stale_days: u32) -> Option<Task> {
         (estimates.iter().sum::<u32>() / estimates.len() as u32).max(1)
     };
     let weight = |i: &crate::model::ChecklistItem| i.estimate_min.unwrap_or(avg_estimate).max(1) as u64;
-    let progress = if checklist_total > 0 && meta.progress_mode == crate::model::ProgressMode::Auto
-    {
+    // 手動なのに値が無い状態は「未設定」とみなし、やることがあれば自動計算に戻す
+    let manual_value = meta.progress.map(|p| p.min(100));
+    let use_manual =
+        checklist_total == 0 || (meta.progress_mode == crate::model::ProgressMode::Manual
+            && manual_value.is_some());
+    let progress = if use_manual {
+        manual_value
+    } else {
         let total_w: u64 = meta.checklist.iter().map(&weight).sum();
         let done_w: u64 = meta.checklist.iter().filter(|i| i.done).map(&weight).sum();
         Some((done_w * 100 / total_w.max(1)) as u32)
-    } else {
-        meta.progress.map(|p| p.min(100))
     };
     let remaining_min = if estimates.is_empty() {
         None
@@ -360,4 +364,21 @@ mod tests {
         assert!(tasks.iter().find(|t| t.name == "完了B").unwrap().archived);
     }
 
+    #[test]
+    fn manual_without_a_value_falls_back_to_the_checklist() {
+        let dir = tempfile::tempdir().unwrap();
+        // 手で編集された、または過去のバグで生まれた「手動なのに値が無い」状態
+        let meta = TaskMeta {
+            checklist: vec![
+                ChecklistItem { text: "a".into(), done: true, estimate_min: Some(60) },
+                ChecklistItem { text: "b".into(), done: false, estimate_min: Some(60) },
+            ],
+            progress: None,
+            progress_mode: ProgressMode::Manual,
+            ..Default::default()
+        };
+        write_meta(dir.path(), &meta).unwrap();
+        let task = scan_task(dir.path(), false, 14).unwrap();
+        assert_eq!(task.progress, Some(50));
+    }
 }

@@ -100,7 +100,10 @@
       memo !== task.memo
   );
 
-  const manualMode = $derived(checklist.length === 0 || progressMode === 'manual');
+  // 手動なのに値が無い状態は「未設定」とみなし、やることがあれば自動計算に戻す
+  const manualMode = $derived(
+    checklist.length === 0 || (progressMode === 'manual' && manualProgress !== null)
+  );
 
   // 表示用の進捗（ローカル編集を即時反映）
   const localProgress = $derived.by(() => {
@@ -124,6 +127,10 @@
 
   function setMode(mode: ProgressMode) {
     if (progressMode === mode) return;
+    // 手動へ切り替えたときに数値が消えないよう、その時点の計算値を引き継ぐ
+    if (mode === 'manual' && manualProgress === null) {
+      manualProgress = localProgress ?? 0;
+    }
     progressMode = mode;
     save();
   }
@@ -268,7 +275,7 @@
                   manualProgress = null;
                   save();
                 }}
-                title="進捗をクリア"
+                title={checklist.length > 0 ? '自動計算に戻す' : '進捗をクリア'}
               >
                 ✕
               </button>
