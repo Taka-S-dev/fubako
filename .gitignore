@@ -1,0 +1,27 @@
+# ホワイトリスト方式: 既定で全て無視し、追跡するものだけ明示的に許可する
+
+/*
+
+# プロジェクト定義
+!/.gitignore
+!/README.md
+!/LICENSE
+!/app-icon.png
+!/docs/
+!/package.json
+!/package-lock.json
+!/svelte.config.js
+!/vite.config.js
+!/tsconfig.json
+
+# ソース
+!/src/
+!/static/
+!/src-tauri/
+
+# src-tauri 配下の生成物は除外
+/src-tauri/target/
+/src-tauri/gen/
+
+# どの階層でもローカル専用メモは追跡しない
+*.local.md

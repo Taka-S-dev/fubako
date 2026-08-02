@@ -1,0 +1,29 @@
+[package]
+name = "fubako"
+version = "0.1.0"
+description = "作業ディレクトリ単位のTODO管理アプリ"
+authors = ["Taka-S-dev"]
+license = "MIT"
+edition = "2021"
+
+[lib]
+name = "fubako_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-opener = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-global-shortcut = "2"
+tauri-plugin-autostart = "2"
+tauri-plugin-single-instance = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+chrono = { version = "0.4", features = ["serde"] }
+notify = "8"
+
+[dev-dependencies]
+tempfile = "3"

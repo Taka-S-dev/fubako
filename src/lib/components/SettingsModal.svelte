@@ -1,0 +1,209 @@
+<script lang="ts">
+  import { open as openDialog } from '@tauri-apps/plugin-dialog';
+  import type { AppConfig } from '$lib/types';
+
+  let {
+    config,
+    autostart,
+    onsave,
+    onclose,
+  }: {
+    config: AppConfig;
+    autostart: boolean;
+    onsave: (config: AppConfig, autostart: boolean) => void;
+    onclose: () => void;
+  } = $props();
+
+  // モーダルは開くたびに再マウントされるため、開いた時点の値で初期化する
+  // svelte-ignore state_referenced_locally
+  const initial = $state.snapshot(config);
+  // svelte-ignore state_referenced_locally
+  const initialAutostart = autostart;
+
+  let workRoot = $state(initial.work_root ?? '');
+  let archiveRoot = $state(initial.archive_root ?? '');
+  let deepRoot = $state(initial.deep_archive_root ?? '');
+  let deepMonths = $state(initial.deep_archive_months);
+  let hotkey = $state(initial.hotkey);
+  let staleDays = $state(initial.stale_days);
+  let templatesText = $state(initial.template_files.join('\n'));
+  let auto = $state(initialAutostart);
+
+  async function pick(target: 'work' | 'archive' | 'deep') {
+    const dir = await openDialog({ directory: true, title: 'フォルダを選択' });
+    if (typeof dir === 'string') {
+      if (target === 'work') workRoot = dir;
+      else if (target === 'archive') archiveRoot = dir;
+      else deepRoot = dir;
+    }
+  }
+
+  function save() {
+    onsave(
+      {
+        // 隠し設定(display_name等)はUIに出さずそのまま引き継ぐ
+        ...initial,
+        work_root: workRoot || null,
+        archive_root: archiveRoot || null,
+        deep_archive_root: deepRoot || null,
+        deep_archive_months: Math.max(1, Number(deepMonths) || 6),
+        hotkey: hotkey.trim(),
+        stale_days: Math.max(1, Number(staleDays) || 14),
+        template_files: templatesText
+          .split('\n')
+          .map((s) => s.trim())
+          .filter(Boolean),
+      },
+      auto
+    );
+  }
+
+  function onkeydown(e: KeyboardEvent) {
+    if (e.key === 'Escape') onclose();
+  }
+</script>
+
+<div class="overlay" onclick={onclose} onkeydown={onkeydown} role="presentation">
+  <div
+    class="modal"
+    onclick={(e) => e.stopPropagation()}
+    onkeydown={(e) => e.stopPropagation()}
+    role="dialog"
+    aria-label="設定"
+    tabindex="-1"
+  >
+    <h2>設定</h2>
+
+    <div class="row">
+      <span class="label">作業ディレクトリ</span>
+      <div class="pick">
+        <input class="field mono" bind:value={workRoot} placeholder="C:\work" />
+        <button class="btn" onclick={() => pick('work')}>選択…</button>
+      </div>
+    </div>
+    <div class="row">
+      <span class="label">アーカイブ先</span>
+      <div class="pick">
+        <input class="field mono" bind:value={archiveRoot} placeholder="C:\work\archive" />
+        <button class="btn" onclick={() => pick('archive')}>選択…</button>
+      </div>
+    </div>
+    <div class="row">
+      <span class="label">ディープアーカイブ先（任意）</span>
+      <div class="pick">
+        <input class="field mono" bind:value={deepRoot} placeholder="C:\work\deep_archive" />
+        <button class="btn" onclick={() => pick('deep')}>選択…</button>
+      </div>
+      <p class="hint">
+        古い完了タスクの退避先。ここはスキャン・検索の対象外になります（コールドストレージ）
+      </p>
+    </div>
+    <div class="row">
+      <span class="label">ディープアーカイブへ移す目安</span>
+      <div class="pick months">
+        <span>完了から</span>
+        <input class="field days" type="number" min="1" bind:value={deepMonths} />
+        <span>か月で整理対象にする</span>
+      </div>
+    </div>
+    <div class="row">
+      <span class="label">呼び出しホットキー</span>
+      <input class="field mono" bind:value={hotkey} placeholder="Ctrl+Alt+KeyE" />
+      <p class="hint">修飾キー + KeyA〜KeyZ / Digit0〜9 の形式。空欄で無効化</p>
+    </div>
+    <div class="row">
+      <span class="label">放置とみなす日数</span>
+      <input class="field days" type="number" min="1" bind:value={staleDays} />
+    </div>
+    <div class="row">
+      <span class="label">新規作成テンプレート</span>
+      <textarea
+        class="field mono"
+        rows="3"
+        bind:value={templatesText}
+        placeholder={'メモ.md\n資料/'}
+      ></textarea>
+      <p class="hint">1行1項目。末尾が / ならフォルダを作成</p>
+    </div>
+    <label class="auto">
+      <input type="checkbox" bind:checked={auto} />
+      Windows サインイン時に起動する（トレイに常駐）
+    </label>
+
+    <div class="buttons">
+      <button class="btn" onclick={onclose}>キャンセル</button>
+      <button class="btn primary" onclick={save} disabled={!workRoot || !archiveRoot}>保存</button>
+    </div>
+  </div>
+</div>
+
+<style>
+  .overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(35, 39, 45, 0.35);
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding-top: 8vh;
+    z-index: 40;
+  }
+  .modal {
+    width: 520px;
+    max-height: 84vh;
+    overflow-y: auto;
+    background: var(--surface);
+    border-radius: 12px;
+    box-shadow: var(--shadow-lift);
+    padding: 20px 22px 18px;
+  }
+  h2 {
+    margin: 0 0 14px;
+    font-size: 15px;
+  }
+  .row {
+    margin-bottom: 12px;
+  }
+  .label {
+    display: block;
+    font-size: 11.5px;
+    color: var(--ink-2);
+    margin-bottom: 4px;
+  }
+  .pick {
+    display: flex;
+    gap: 6px;
+  }
+  .pick .field {
+    flex: 1;
+  }
+  .days {
+    width: 90px;
+  }
+  .months {
+    align-items: center;
+    font-size: 12px;
+    color: var(--ink-2);
+  }
+  .hint {
+    margin: 4px 0 0;
+    font-size: 11px;
+    color: var(--ink-3);
+  }
+  textarea.field {
+    resize: vertical;
+  }
+  .auto {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 12.5px;
+    margin: 14px 0 4px;
+  }
+  .buttons {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 14px;
+  }
+</style>

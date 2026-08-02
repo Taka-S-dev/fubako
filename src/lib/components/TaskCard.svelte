@@ -1,0 +1,217 @@
+<script lang="ts">
+  import type { Task } from '$lib/types';
+  import { daysSince, fmtMinutes, fmtPrefix, isOverdue, relativeDays } from '$lib/format';
+
+  let {
+    task,
+    selected = false,
+    onselect,
+    onpointerdown,
+  }: {
+    task: Task;
+    selected?: boolean;
+    onselect: (t: Task) => void;
+    onpointerdown: (e: PointerEvent, t: Task) => void;
+  } = $props();
+
+  const dateLabel = $derived(
+    fmtPrefix(task.date_prefix) ??
+      (task.created_at ? task.created_at.slice(0, 10).replaceAll('-', '.') : null)
+  );
+</script>
+
+<button
+  class="card status-{task.status}"
+  class:selected
+  onpointerdown={(e) => onpointerdown(e, task)}
+  onclick={() => onselect(task)}
+  title={task.folder_name}
+>
+  <div class="top">
+    {#if dateLabel}<span class="date mono">{dateLabel}</span>{/if}
+    <span class="spacer"></span>
+    {#if task.stale}
+      <span class="badge stale">放置 {daysSince(task.last_activity)}日</span>
+    {/if}
+    {#if task.due && !task.archived}
+      <span class="badge due" class:overdue={isOverdue(task.due)}>
+        期限 {task.due.slice(5).replace('-', '/')}
+      </span>
+    {/if}
+  </div>
+  <div class="name">{task.name}</div>
+  {#if task.progress !== null && !task.archived}
+    <div class="progress-row">
+      <div
+        class="bar"
+        role="progressbar"
+        aria-valuenow={task.progress}
+        aria-valuemin={0}
+        aria-valuemax={100}
+      >
+        <div class="fill" style="width: {task.progress}%"></div>
+      </div>
+      <span class="p-label mono">{task.progress}%</span>
+      {#if task.remaining_min !== null && task.remaining_min > 0}
+        <span class="p-label remain">残り{fmtMinutes(task.remaining_min)}</span>
+      {/if}
+    </div>
+  {/if}
+  <div class="bottom">
+    <span>{task.file_count} 項目</span>
+    <span class="sep">·</span>
+    <span>
+      {task.archived ? `完了 ${relativeDays(task.completed_at)}` : `更新 ${relativeDays(task.last_activity)}`}
+    </span>
+    {#each task.tags.slice(0, 3) as tag (tag)}
+      <span class="tag">{tag}</span>
+    {/each}
+  </div>
+</button>
+
+<style>
+  /* マニラフォルダのタブを模した左肩の出っ張りがカードの署名要素 */
+  .card {
+    position: relative;
+    display: block;
+    width: 100%;
+    text-align: left;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 2px var(--radius) var(--radius) var(--radius);
+    padding: 9px 12px 10px;
+    box-shadow: var(--shadow);
+    transition: box-shadow 0.12s ease, transform 0.12s ease, border-color 0.12s ease;
+  }
+  .card::before {
+    content: '';
+    position: absolute;
+    top: -7px;
+    left: -1px;
+    width: 38px;
+    height: 7px;
+    border: 1px solid var(--line);
+    border-bottom: none;
+    border-radius: 4px 7px 0 0;
+    background: var(--slate-soft);
+  }
+  .card.status-doing::before {
+    background: var(--manila-tab);
+  }
+  .card.status-done::before {
+    background: var(--green-soft);
+  }
+  .card:hover {
+    box-shadow: var(--shadow-lift);
+    transform: translateY(-1px);
+  }
+  .card.selected {
+    border-color: var(--ink);
+  }
+  .card.selected::before {
+    border-color: var(--ink);
+    border-bottom: none;
+  }
+  .card:active {
+    cursor: grabbing;
+  }
+
+  .top {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 3px;
+    min-height: 16px;
+  }
+  .date {
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    color: var(--ink-2);
+  }
+  .spacer {
+    flex: 1;
+  }
+  .badge {
+    font-size: 10px;
+    padding: 1px 6px;
+    border-radius: 99px;
+    white-space: nowrap;
+  }
+  .badge.stale {
+    background: var(--red-soft);
+    color: var(--red);
+  }
+  .badge.due {
+    background: var(--slate-soft);
+    color: var(--ink-2);
+  }
+  .badge.due.overdue {
+    background: var(--red);
+    color: #fff;
+  }
+
+  .name {
+    font-size: 13.5px;
+    font-weight: 600;
+    line-height: 1.4;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    word-break: break-all;
+  }
+
+  .progress-row {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    margin-top: 7px;
+  }
+  .bar {
+    flex: 1;
+    height: 4px;
+    border-radius: 99px;
+    background: var(--slate-soft);
+    overflow: hidden;
+  }
+  .fill {
+    height: 100%;
+    border-radius: 99px;
+    background: var(--manila);
+    transition: width 0.2s ease;
+  }
+  .p-label {
+    font-size: 10.5px;
+    color: var(--ink-2);
+    flex: none;
+  }
+  .p-label.remain {
+    color: var(--ink-3);
+  }
+
+  .bottom {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin-top: 6px;
+    font-size: 11px;
+    color: var(--ink-3);
+  }
+  .sep {
+    color: var(--line-strong);
+  }
+  .tag {
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    color: var(--ink-2);
+    padding: 0 6px;
+    border-radius: 4px;
+  }
+
+  .card.status-done .name {
+    color: var(--ink-2);
+    font-weight: 500;
+  }
+</style>
