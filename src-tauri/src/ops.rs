@@ -496,6 +496,10 @@ pub async fn import_task(state: State<'_, AppState>, path: String) -> Result<Tas
 
 #[tauri::command]
 pub async fn open_in_explorer(app: AppHandle, path: String) -> Result<(), String> {
+    // 同じフォルダの窓が積み上がらないよう、開いているものがあればそれを使う
+    if crate::explorer::focus_existing_window(Path::new(&path)) {
+        return Ok(());
+    }
     app.opener()
         .open_path(path, None::<&str>)
         .map_err(|e| e.to_string())

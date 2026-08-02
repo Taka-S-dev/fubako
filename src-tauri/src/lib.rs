@@ -1,4 +1,5 @@
 mod config;
+mod explorer;
 mod model;
 mod ops;
 mod scan;
