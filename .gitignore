@@ -4,6 +4,7 @@
 
 # プロジェクト定義
 !/.gitignore
+!/.gitattributes
 !/.github/
 !/README.md
 !/LICENSE

@@ -1,0 +1,3 @@
+# Keep line endings identical on every platform. Without this the
+# repository depends on each machine's core.autocrlf setting.
+* text=auto eol=lf
