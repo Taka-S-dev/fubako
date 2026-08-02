@@ -7,11 +7,13 @@
     selected = false,
     onselect,
     onpointerdown,
+    oncontext,
   }: {
     task: Task;
     selected?: boolean;
     onselect: (t: Task) => void;
     onpointerdown: (e: PointerEvent, t: Task) => void;
+    oncontext: (e: MouseEvent, t: Task) => void;
   } = $props();
 
   const dateLabel = $derived(
@@ -25,6 +27,7 @@
   class:selected
   onpointerdown={(e) => onpointerdown(e, task)}
   onclick={() => onselect(task)}
+  oncontextmenu={(e) => oncontext(e, task)}
   title={task.folder_name}
 >
   <div class="top">

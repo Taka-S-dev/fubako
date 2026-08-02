@@ -7,12 +7,14 @@
     selectedPath,
     state,
     onselect,
+    oncontext,
   }: {
     tasks: Task[];
     selectedPath: string | null;
     /** 表示条件は親が持つ。ビューを切り替えても選び直さずに済む */
     state: ListViewState;
     onselect: (t: Task) => void;
+    oncontext: (e: MouseEvent, t: Task) => void;
   } = $props();
 
   type SortKey = ListSortKey;
@@ -113,7 +115,11 @@
       </thead>
       <tbody>
         {#each rows as t (t.path)}
-          <tr class:selected={t.path === selectedPath} onclick={() => onselect(t)}>
+          <tr
+            class:selected={t.path === selectedPath}
+            onclick={() => onselect(t)}
+            oncontextmenu={(e) => oncontext(e, t)}
+          >
             <td>
               <span class="st st-{t.status}">
                 <span class="st-dot"></span>{statusLabel[t.status]}

@@ -23,6 +23,7 @@
     onrename,
     onsave,
     onopenentry,
+    onentrycontext,
   }: {
     task: Task;
     listing: FolderListing;
@@ -47,6 +48,7 @@
       progressMode: ProgressMode
     ) => void;
     onopenentry: (t: Task, entry: FolderEntry) => void;
+    onentrycontext: (e: MouseEvent, t: Task, entry: FolderEntry) => void;
   } = $props();
 
   let currentPath = $state('');
@@ -522,6 +524,7 @@
             <button
               class="frow"
               onclick={() => onopenentry(task, entry)}
+              oncontextmenu={(e) => onentrycontext(e, task, entry)}
               title={entry.is_dir ? `${entry.rel} をエクスプローラーで開く` : `${entry.rel} を開く`}
             >
               {#if entry.icon}

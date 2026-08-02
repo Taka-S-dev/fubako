@@ -10,6 +10,7 @@
     filtering,
     onselect,
     onpointerdown,
+    oncontext,
   }: {
     tasks: Task[];
     selectedPath: string | null;
@@ -20,6 +21,7 @@
     filtering: boolean;
     onselect: (t: Task) => void;
     onpointerdown: (e: PointerEvent, t: Task) => void;
+    oncontext: (e: MouseEvent, t: Task) => void;
   } = $props();
 
   const columnDefs: { status: Status; title: string; empty: string }[] = [
@@ -60,7 +62,13 @@
       </h2>
       <div class="col-body">
         {#each list as task (task.path)}
-          <TaskCard {task} selected={task.path === selectedPath} {onselect} {onpointerdown} />
+          <TaskCard
+            {task}
+            selected={task.path === selectedPath}
+            {onselect}
+            {onpointerdown}
+            {oncontext}
+          />
         {:else}
           <p class="col-empty">
             {filtering ? '検索に一致する作業はありません' : col.empty}

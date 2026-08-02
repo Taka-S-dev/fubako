@@ -7,6 +7,7 @@
   import { api } from '$lib/api';
   import { CardDrag } from '$lib/dnd.svelte';
   import { collectTags, filterTasks, parseTerms } from '$lib/search';
+  import { SEPARATOR, wantsNativeMenu, type MenuItem, type OpenMenu } from '$lib/menu';
   import type {
     AppConfig,
     CalendarViewState,
@@ -24,6 +25,7 @@
   import ListView from '$lib/components/ListView.svelte';
   import CalendarView from '$lib/components/CalendarView.svelte';
   import Dashboard from '$lib/components/Dashboard.svelte';
+  import ContextMenu from '$lib/components/ContextMenu.svelte';
   import CreateModal from '$lib/components/CreateModal.svelte';
   import Onboarding from '$lib/components/Onboarding.svelte';
   import SettingsModal from '$lib/components/SettingsModal.svelte';
@@ -58,6 +60,7 @@
   let topBar: ReturnType<typeof TopBar> | undefined = $state();
 
   const drag = new CardDrag(dropOn);
+  let menu = $state<OpenMenu | null>(null);
 
   // オンボーディング用
   let obWork = $state('');
@@ -117,6 +120,70 @@
       })
       .catch(() => (listing = emptyListing));
   });
+  /** 入力欄と選択テキストの上では OS 標準を残し、それ以外の既定メニューは出さない */
+  function onContextMenu(e: MouseEvent) {
+    if (wantsNativeMenu(e.target)) return;
+    e.preventDefault();
+  }
+
+  function openMenu(e: MouseEvent, items: MenuItem[]) {
+    e.preventDefault();
+    e.stopPropagation();
+    menu = { x: e.clientX, y: e.clientY, items };
+  }
+
+  function taskMenu(e: MouseEvent, task: Task) {
+    selectedPath = task.path;
+    const items: MenuItem[] = [
+      { label: 'エクスプローラーで開く', action: () => handleOpen(task) },
+      { label: 'パスをコピー', action: () => handleCopyPath(task) },
+      SEPARATOR,
+    ];
+    if (task.archived) {
+      items.push({ label: '作業に戻す', action: () => handleReopen(task) });
+      if (config?.deep_archive_root) {
+        items.push({
+          label: 'ディープアーカイブへ',
+          action: () => handleDeepArchiveOne(task),
+          danger: true,
+        });
+      }
+    } else {
+      items.push({ label: '完了してアーカイブ', action: () => handleComplete(task) });
+    }
+    openMenu(e, items);
+  }
+
+  function entryMenu(e: MouseEvent, task: Task, entry: FolderEntry) {
+    const full = `${task.path}\\${entry.rel}`;
+    // サブフォルダの中のものは、その親フォルダを開く
+    const parent = entry.rel.includes('\\')
+      ? `${task.path}\\${entry.rel.slice(0, entry.rel.lastIndexOf('\\'))}`
+      : task.path;
+    openMenu(e, [
+      {
+        label: entry.is_dir ? 'エクスプローラーで開く' : '開く',
+        action: () => api.openEntry(full).catch((err) => toast(String(err), 'error')),
+      },
+      {
+        label: '保存場所を開く',
+        action: () => api.openInExplorer(parent).catch((err) => toast(String(err), 'error')),
+      },
+      SEPARATOR,
+      {
+        label: 'パスをコピー',
+        action: async () => {
+          try {
+            await navigator.clipboard.writeText(full);
+            toast('パスをコピーしました');
+          } catch {
+            toast('コピーに失敗しました', 'error');
+          }
+        },
+      },
+    ]);
+  }
+
   function selectCard(t: Task) {
     if (drag.suppressClick) return;
     selectedPath = selectedPath === t.path ? null : t.path;
@@ -388,7 +455,7 @@
   });
 </script>
 
-<svelte:window onkeydown={onKeydown} />
+<svelte:window onkeydown={onKeydown} oncontextmenu={onContextMenu} />
 
 <div class="app">
   <TopBar
@@ -419,7 +486,13 @@
   {:else}
     <div class="main">
       {#if view === 'list'}
-        <ListView tasks={filtered} {selectedPath} state={listState} onselect={selectCard} />
+        <ListView
+          tasks={filtered}
+          {selectedPath}
+          state={listState}
+          onselect={selectCard}
+          oncontext={taskMenu}
+        />
       {:else if view === 'cal'}
         <CalendarView tasks={filtered} {selectedPath} state={calState} onselect={selectCard} />
       {:else if view === 'dash'}
@@ -439,6 +512,7 @@
           filtering={!!query}
           onselect={selectCard}
           onpointerdown={drag.start}
+          oncontext={taskMenu}
         />
       {/if}
 
@@ -457,6 +531,7 @@
           onrename={handleRename}
           onsave={handleSaveMeta}
           onopenentry={handleOpenEntry}
+          onentrycontext={entryMenu}
         />
       {/if}
     </div>
@@ -466,6 +541,10 @@
     <div class="ghost" style="left: {drag.ghost.x + 12}px; top: {drag.ghost.y + 10}px">
       {drag.task.name}
     </div>
+  {/if}
+
+  {#if menu}
+    <ContextMenu x={menu.x} y={menu.y} items={menu.items} onclose={() => (menu = null)} />
   {/if}
 
   <div class="toasts">
