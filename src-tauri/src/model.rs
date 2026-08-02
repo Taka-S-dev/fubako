@@ -86,12 +86,24 @@ pub struct Task {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct FolderEntry {
-    pub name: String,
+    /// タスクフォルダからの相対パス。サブフォルダの中身は `資料\仕様書.xlsx` のように出る
+    pub rel: String,
     pub is_dir: bool,
     pub size: u64,
     pub modified: Option<String>,
     /// シェルが持つ種類アイコンの data URI。取得できなければ None
     pub icon: Option<String>,
+}
+
+/// フォルダの中身の一覧。上限で打ち切った場合はその旨を伝え、
+/// 「これで全部」と誤解させないようにする
+#[derive(Debug, Clone, Serialize)]
+pub struct FolderListing {
+    pub entries: Vec<FolderEntry>,
+    /// 深さの上限を超えるフォルダがあった
+    pub deeper_omitted: bool,
+    /// 件数の上限に達して打ち切った
+    pub count_capped: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

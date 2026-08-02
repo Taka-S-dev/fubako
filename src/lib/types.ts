@@ -50,12 +50,21 @@ export interface Task {
 }
 
 export interface FolderEntry {
-  name: string;
+  /** タスクフォルダからの相対パス。サブフォルダの中身は `資料\仕様書.xlsx` のように入る */
+  rel: string;
   is_dir: boolean;
   size: number;
   modified: string | null;
   /** シェルが持つ種類アイコンの data URI。取得できなければ null */
   icon: string | null;
+}
+
+export interface FolderListing {
+  entries: FolderEntry[];
+  /** 深さの上限を超えるフォルダがあった */
+  deeper_omitted: boolean;
+  /** 件数の上限に達して打ち切った */
+  count_capped: boolean;
 }
 
 export interface AppConfig {

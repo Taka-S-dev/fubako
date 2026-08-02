@@ -1,10 +1,17 @@
 <script lang="ts">
-  import type { ChecklistItem, FolderEntry, ProgressMode, Status, Task } from '$lib/types';
+  import type {
+    ChecklistItem,
+    FolderEntry,
+    FolderListing,
+    ProgressMode,
+    Status,
+    Task,
+  } from '$lib/types';
   import { fmtDateTime, fmtDurationCompact, fmtMinutes, fmtSize, parseDuration } from '$lib/format';
 
   let {
     task,
-    entries,
+    listing,
     alltags = [],
     candeep = false,
     onclose,
@@ -18,7 +25,7 @@
     onopenentry,
   }: {
     task: Task;
-    entries: FolderEntry[];
+    listing: FolderListing;
     /** 他のタスクで使われているタグ。よく使う順 */
     alltags?: string[];
     candeep?: boolean;
@@ -504,24 +511,30 @@
   </section>
 
   <section class="files">
-    <h3>フォルダの中身 <span class="count">{entries.length} 項目</span></h3>
-    {#if entries.length === 0}
+    <h3>フォルダの中身 <span class="count">{listing.entries.length} 項目</span></h3>
+    {#if listing.entries.length === 0}
       <p class="empty">まだファイルがありません</p>
     {:else}
       <ul>
-        {#each entries as entry (entry.name)}
+        {#each listing.entries as entry (entry.rel)}
+          {@const cut = entry.rel.lastIndexOf('\\')}
           <li>
             <button
               class="frow"
               onclick={() => onopenentry(task, entry)}
-              title={entry.is_dir ? `${entry.name} をエクスプローラーで開く` : `${entry.name} を開く`}
+              title={entry.is_dir ? `${entry.rel} をエクスプローラーで開く` : `${entry.rel} を開く`}
             >
               {#if entry.icon}
                 <img class="ficon" src={entry.icon} alt="" width="16" height="16" />
               {:else}
                 <span class="ficon">{entry.is_dir ? '▸' : '·'}</span>
               {/if}
-              <span class="fname">{entry.name}</span>
+              <span class="fname">
+                <!-- 幅が足りないときは親フォルダ側から削り、名前そのものは残す -->
+                {#if cut >= 0}<span class="fparent">{entry.rel.slice(0, cut + 1)}</span>{/if}<span
+                  class="fleaf">{entry.rel.slice(cut + 1)}</span
+                >
+              </span>
               <span class="fmeta mono">
                 {entry.is_dir ? '' : fmtSize(entry.size)}
               </span>
@@ -530,6 +543,13 @@
           </li>
         {/each}
       </ul>
+      {#if listing.count_capped || listing.deeper_omitted}
+        <p class="omitted">
+          {#if listing.count_capped}件数が多いため、途中までを表示しています。{/if}
+          {#if listing.deeper_omitted}深い階層のフォルダは省略しています。{/if}
+          すべて見るにはエクスプローラーで開いてください。
+        </p>
+      {/if}
     {/if}
   </section>
 </aside>
@@ -1014,9 +1034,25 @@
   }
   .fname {
     flex: 1;
+    display: flex;
+    min-width: 0;
     white-space: nowrap;
+  }
+  .fparent {
+    color: var(--ink-3);
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+  .fleaf {
+    flex: none;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .omitted {
+    margin: 6px 2px 0;
+    color: var(--ink-3);
+    font-size: 11px;
+    line-height: 1.5;
   }
   .fmeta {
     color: var(--ink-3);

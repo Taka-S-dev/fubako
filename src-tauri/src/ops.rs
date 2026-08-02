@@ -1,4 +1,6 @@
-use crate::model::{AppConfig, ChecklistItem, FolderEntry, ProgressMode, Status, Task, TaskMeta};
+use crate::model::{
+    AppConfig, ChecklistItem, FolderEntry, FolderListing, ProgressMode, Status, Task, TaskMeta,
+};
 use crate::scan::{self, META_FILE};
 use crate::{config, watch, AppState};
 use chrono::Local;
@@ -527,34 +529,93 @@ pub async fn open_entry(
         .map_err(|e| e.to_string())
 }
 
+/// 一覧を作るときに降りる深さ。作業フォルダは資料置き場なので、
+/// これ以上深いものは中身を見るよりエクスプローラーで開くほうが早い
+const LIST_MAX_DEPTH: u32 = 3;
+/// 一覧の件数上限。リポジトリや書き出しフォルダを置かれても固まらないようにする
+const LIST_MAX_ENTRIES: usize = 500;
+
+/// エクスプローラーの既定表示に合わせ、隠しファイルとシステムファイルは出さない。
+/// `.git` のような作業に関係のないフォルダで件数上限を使い切らないためでもある
+#[cfg(windows)]
+fn is_hidden(meta: &fs::Metadata) -> bool {
+    use std::os::windows::fs::MetadataExt;
+    const HIDDEN: u32 = 0x2;
+    const SYSTEM: u32 = 0x4;
+    meta.file_attributes() & (HIDDEN | SYSTEM) != 0
+}
+
+#[cfg(not(windows))]
+fn is_hidden(_meta: &fs::Metadata) -> bool {
+    false
+}
+
+/// フォルダの中身を再帰的に集める。相対パスのまま平らに並べるので、
+/// 展開状態を持たずにサブフォルダの中身まで見せられる
+fn collect_entries(dir: &Path, prefix: &str, depth: u32, listing: &mut FolderListing) {
+    let Ok(read) = fs::read_dir(dir) else { return };
+    for entry in read.flatten() {
+        if listing.entries.len() >= LIST_MAX_ENTRIES {
+            listing.count_capped = true;
+            return;
+        }
+        let name = entry.file_name().to_string_lossy().to_string();
+        if name.starts_with(META_FILE) {
+            continue;
+        }
+        let Ok(meta) = entry.metadata() else { continue };
+        if is_hidden(&meta) {
+            continue;
+        }
+        let rel = if prefix.is_empty() {
+            name
+        } else {
+            format!("{prefix}\\{name}")
+        };
+        let is_dir = meta.is_dir();
+        listing.entries.push(FolderEntry {
+            is_dir,
+            size: if is_dir { 0 } else { meta.len() },
+            modified: meta
+                .modified()
+                .ok()
+                .map(|t| chrono::DateTime::<Local>::from(t).to_rfc3339()),
+            icon: crate::icons::data_uri(&entry.path(), is_dir),
+            rel: rel.clone(),
+        });
+        if is_dir {
+            if depth + 1 < LIST_MAX_DEPTH {
+                collect_entries(&entry.path(), &rel, depth + 1, listing);
+            } else {
+                listing.deeper_omitted = true;
+            }
+        }
+    }
+}
+
+fn build_listing(dir: &Path) -> FolderListing {
+    let mut listing = FolderListing {
+        entries: Vec::new(),
+        deeper_omitted: false,
+        count_capped: false,
+    };
+    collect_entries(dir, "", 0, &mut listing);
+    // 区切りを NUL に置き換えて並べると、フォルダとその中身が離れずにまとまる。
+    // そのまま比較すると `資料2` が `資料\...` より前に割り込んでしまう
+    listing
+        .entries
+        .sort_by_cached_key(|e| e.rel.replace('\\', "\u{0}"));
+    listing
+}
+
 #[tauri::command]
 pub async fn list_folder(
     state: State<'_, AppState>,
     path: String,
-) -> Result<Vec<FolderEntry>, String> {
+) -> Result<FolderListing, String> {
     let config = state.config.lock().unwrap().clone();
     let dir = ensure_managed(Path::new(&path), &config)?;
-    let mut entries: Vec<FolderEntry> = fs::read_dir(&dir)
-        .map_err(|e| e.to_string())?
-        .flatten()
-        .filter(|e| !e.file_name().to_string_lossy().starts_with(META_FILE))
-        .filter_map(|e| {
-            let meta = e.metadata().ok()?;
-            let modified = meta
-                .modified()
-                .ok()
-                .map(|t| chrono::DateTime::<Local>::from(t).to_rfc3339());
-            Some(FolderEntry {
-                name: e.file_name().to_string_lossy().to_string(),
-                is_dir: meta.is_dir(),
-                size: if meta.is_dir() { 0 } else { meta.len() },
-                icon: crate::icons::data_uri(&e.path(), meta.is_dir()),
-                modified,
-            })
-        })
-        .collect();
-    entries.sort_by(|a, b| b.is_dir.cmp(&a.is_dir).then(a.name.cmp(&b.name)));
-    Ok(entries)
+    Ok(build_listing(&dir))
 }
 
 #[tauri::command]
@@ -638,6 +699,64 @@ mod tests {
         assert!(ensure_managed(&sneaky, &config).is_err());
         // 存在しないパスも拒否
         assert!(ensure_managed(&work.join("なし"), &config).is_err());
+    }
+
+    #[test]
+    fn listing_keeps_a_folder_next_to_its_contents() {
+        let dir = tempfile::tempdir().unwrap();
+        let task = dir.path().join("20260802_task");
+        fs::create_dir_all(task.join("資料")).unwrap();
+        fs::create_dir_all(task.join("資料2")).unwrap();
+        fs::write(task.join("資料").join("仕様書.xlsx"), b"x").unwrap();
+        fs::write(task.join("資料2").join("控え.txt"), b"x").unwrap();
+        fs::write(task.join("メモ.md"), b"x").unwrap();
+        fs::write(task.join(META_FILE), b"{}").unwrap();
+
+        let rels: Vec<String> = build_listing(&task)
+            .entries
+            .into_iter()
+            .map(|e| e.rel)
+            .collect();
+        // `資料2` が `資料\仕様書.xlsx` の前に割り込まないこと
+        assert_eq!(
+            rels,
+            vec![
+                "メモ.md",
+                r"資料",
+                r"資料\仕様書.xlsx",
+                r"資料2",
+                r"資料2\控え.txt",
+            ]
+        );
+    }
+
+    #[test]
+    fn listing_stops_at_the_depth_limit_and_says_so() {
+        let dir = tempfile::tempdir().unwrap();
+        let task = dir.path().join("20260802_task");
+        let deep = task.join("a").join("b").join("c");
+        fs::create_dir_all(&deep).unwrap();
+        fs::write(deep.join("奥のファイル.txt"), b"x").unwrap();
+
+        let listing = build_listing(&task);
+        let rels: Vec<&str> = listing.entries.iter().map(|e| e.rel.as_str()).collect();
+        assert_eq!(rels, vec!["a", r"a\b", r"a\b\c"]);
+        // 打ち切ったことを伝えないと「これで全部」と読まれてしまう
+        assert!(listing.deeper_omitted);
+        assert!(!listing.count_capped);
+    }
+
+    #[test]
+    fn listing_stops_at_the_count_limit_and_says_so() {
+        let dir = tempfile::tempdir().unwrap();
+        let task = dir.path().join("20260802_task");
+        fs::create_dir_all(&task).unwrap();
+        for i in 0..(LIST_MAX_ENTRIES + 20) {
+            fs::write(task.join(format!("{i:04}.txt")), b"x").unwrap();
+        }
+        let listing = build_listing(&task);
+        assert_eq!(listing.entries.len(), LIST_MAX_ENTRIES);
+        assert!(listing.count_capped);
     }
 
     #[test]

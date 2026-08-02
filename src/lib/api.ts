@@ -1,5 +1,12 @@
 import { invoke } from '@tauri-apps/api/core';
-import type { AppConfig, ChecklistItem, FolderEntry, ProgressMode, Status, Task } from './types';
+import type {
+  AppConfig,
+  ChecklistItem,
+  FolderListing,
+  ProgressMode,
+  Status,
+  Task,
+} from './types';
 
 export const api = {
   getConfig: () => invoke<AppConfig>('get_config'),
@@ -36,7 +43,7 @@ export const api = {
   reopenTask: (path: string) => invoke<string>('reopen_task', { path }),
   openInExplorer: (path: string) => invoke<void>('open_in_explorer', { path }),
   openEntry: (path: string) => invoke<void>('open_entry', { path }),
-  listFolder: (path: string) => invoke<FolderEntry[]>('list_folder', { path }),
+  listFolder: (path: string) => invoke<FolderListing>('list_folder', { path }),
   getAutostart: () => invoke<boolean>('get_autostart'),
   setAutostart: (enabled: boolean) => invoke<void>('set_autostart', { enabled }),
 };

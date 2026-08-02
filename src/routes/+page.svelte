@@ -10,6 +10,7 @@
     CalendarViewState,
     ChecklistItem,
     FolderEntry,
+    FolderListing,
     ListViewState,
     ProgressMode,
     Status,
@@ -43,7 +44,8 @@
   let loaded = $state(false);
   let query = $state('');
   let selectedPath = $state<string | null>(null);
-  let entries = $state<FolderEntry[]>([]);
+  const emptyListing: FolderListing = { entries: [], deeper_omitted: false, count_capped: false };
+  let listing = $state<FolderListing>(emptyListing);
   let showCreate = $state(false);
   let showSettings = $state(false);
   let autostart = $state(false);
@@ -241,15 +243,15 @@
   $effect(() => {
     const path = selected?.path;
     if (!path) {
-      entries = [];
+      listing = emptyListing;
       return;
     }
     api
       .listFolder(path)
-      .then((list) => {
-        if (selected?.path === path) entries = list;
+      .then((result) => {
+        if (selected?.path === path) listing = result;
       })
-      .catch(() => (entries = []));
+      .catch(() => (listing = emptyListing));
   });
 
   function startDrag(e: PointerEvent, task: Task) {
@@ -411,7 +413,7 @@
   }
 
   function handleOpenEntry(task: Task, entry: FolderEntry) {
-    api.openEntry(`${task.path}\\${entry.name}`).catch((e) => toast(String(e), 'error'));
+    api.openEntry(`${task.path}\\${entry.rel}`).catch((e) => toast(String(e), 'error'));
   }
 
   async function handleSaveSettings(next: AppConfig, auto: boolean) {
@@ -778,7 +780,7 @@
       {#if selected}
         <DetailPanel
           task={selected}
-          {entries}
+          {listing}
           alltags={allTags}
           candeep={!!config?.deep_archive_root}
           onclose={() => (selectedPath = null)}
