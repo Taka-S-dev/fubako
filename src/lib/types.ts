@@ -1,4 +1,21 @@
 export type Status = 'backlog' | 'doing' | 'done';
+
+export type ListSortKey = 'status' | 'name' | 'date' | 'progress' | 'due' | 'activity';
+
+/** ビュー切り替えで失われないよう、各ビューの表示条件は親が保持する */
+export interface ListViewState {
+  statusFilter: 'all' | Status;
+  sortKey: ListSortKey;
+  sortAsc: boolean;
+}
+
+export interface CalendarViewState {
+  year: number;
+  month: number;
+  showStart: boolean;
+  showDue: boolean;
+  showDone: boolean;
+}
 export type ProgressMode = 'auto' | 'manual';
 
 export interface ChecklistItem {

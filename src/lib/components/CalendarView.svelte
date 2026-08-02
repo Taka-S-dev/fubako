@@ -1,23 +1,20 @@
 <script lang="ts">
-  import type { Task } from '$lib/types';
+  import type { CalendarViewState, Task } from '$lib/types';
 
   let {
     tasks,
     selectedPath,
+    state,
     onselect,
   }: {
     tasks: Task[];
     selectedPath: string | null;
+    /** 表示月と凡例は親が持つ。ビューを切り替えても見ていた月に戻れる */
+    state: CalendarViewState;
     onselect: (t: Task) => void;
   } = $props();
 
   const today = new Date();
-  let year = $state(today.getFullYear());
-  let month = $state(today.getMonth()); // 0-11
-
-  let showStart = $state(true);
-  let showDue = $state(true);
-  let showDone = $state(true);
 
   function pad(n: number): string {
     return String(n).padStart(2, '0');
@@ -28,22 +25,27 @@
   const todayKey = keyOf(today);
 
   function move(delta: number) {
-    const d = new Date(year, month + delta, 1);
-    year = d.getFullYear();
-    month = d.getMonth();
+    const d = new Date(state.year, state.month + delta, 1);
+    state.year = d.getFullYear();
+    state.month = d.getMonth();
   }
   function goToday() {
-    year = today.getFullYear();
-    month = today.getMonth();
+    state.year = today.getFullYear();
+    state.month = today.getMonth();
   }
 
   // 日曜始まり6週間(42マス)
   const cells = $derived.by(() => {
-    const first = new Date(year, month, 1);
-    const start = new Date(year, month, 1 - first.getDay());
+    const first = new Date(state.year, state.month, 1);
+    const start = new Date(state.year, state.month, 1 - first.getDay());
     return Array.from({ length: 42 }, (_, i) => {
       const d = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i);
-      return { key: keyOf(d), day: d.getDate(), inMonth: d.getMonth() === month, dow: d.getDay() };
+      return {
+        key: keyOf(d),
+        day: d.getDate(),
+        inMonth: d.getMonth() === state.month,
+        dow: d.getDay(),
+      };
     });
   });
 
@@ -57,15 +59,15 @@
       map.get(key)!.push({ task, kind });
     };
     for (const t of tasks) {
-      if (showStart && t.date_prefix && t.date_prefix.length === 8) {
+      if (state.showStart && t.date_prefix && t.date_prefix.length === 8) {
         add(
           `${t.date_prefix.slice(0, 4)}-${t.date_prefix.slice(4, 6)}-${t.date_prefix.slice(6, 8)}`,
           t,
           'start'
         );
       }
-      if (showDue && t.due && !t.archived) add(t.due, t, 'due');
-      if (showDone && t.completed_at) add(t.completed_at.slice(0, 10), t, 'done');
+      if (state.showDue && t.due && !t.archived) add(t.due, t, 'due');
+      if (state.showDone && t.completed_at) add(t.completed_at.slice(0, 10), t, 'done');
     }
     // 期限 > 完了 > 開始 の順に表示
     const order = { due: 0, done: 1, start: 2 };
@@ -84,17 +86,21 @@
   <div class="cal-head">
     <div class="nav">
       <button class="btn nav-btn" onclick={() => move(-1)} aria-label="前の月">‹</button>
-      <span class="ym">{year}年{month + 1}月</span>
+      <span class="ym">{state.year}年{state.month + 1}月</span>
       <button class="btn nav-btn" onclick={() => move(1)} aria-label="次の月">›</button>
       <button class="btn today-btn" onclick={goToday}>今日</button>
     </div>
     <div class="legend">
-      <label><input type="checkbox" bind:checked={showDue} /><span class="dot due"></span>期限</label>
-      <label
-        ><input type="checkbox" bind:checked={showDone} /><span class="dot done"></span>完了</label
+      <label><input type="checkbox" bind:checked={state.showDue} /><span class="dot due"></span
+        >期限</label
       >
       <label
-        ><input type="checkbox" bind:checked={showStart} /><span class="dot start"></span>開始</label
+        ><input type="checkbox" bind:checked={state.showDone} /><span class="dot done"></span
+        >完了</label
+      >
+      <label
+        ><input type="checkbox" bind:checked={state.showStart} /><span class="dot start"></span
+        >開始</label
       >
     </div>
   </div>

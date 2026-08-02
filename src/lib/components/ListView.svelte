@@ -1,21 +1,21 @@
 <script lang="ts">
-  import type { Status, Task } from '$lib/types';
+  import type { ListSortKey, ListViewState, Status, Task } from '$lib/types';
   import { fmtDate, fmtPrefix, isOverdue, relativeDays } from '$lib/format';
 
   let {
     tasks,
     selectedPath,
+    state,
     onselect,
   }: {
     tasks: Task[];
     selectedPath: string | null;
+    /** 表示条件は親が持つ。ビューを切り替えても選び直さずに済む */
+    state: ListViewState;
     onselect: (t: Task) => void;
   } = $props();
 
-  type SortKey = 'status' | 'name' | 'date' | 'progress' | 'due' | 'activity';
-  let sortKey = $state<SortKey>('activity');
-  let sortAsc = $state(false);
-  let statusFilter = $state<'all' | Status>('all');
+  type SortKey = ListSortKey;
 
   const statusLabel: Record<Status, string> = {
     backlog: '未着手',
@@ -25,21 +25,21 @@
   const statusOrder: Record<Status, number> = { doing: 0, backlog: 1, done: 2 };
 
   function setSort(key: SortKey) {
-    if (sortKey === key) {
-      sortAsc = !sortAsc;
+    if (state.sortKey === key) {
+      state.sortAsc = !state.sortAsc;
     } else {
-      sortKey = key;
-      sortAsc = key === 'name' || key === 'status';
+      state.sortKey = key;
+      state.sortAsc = key === 'name' || key === 'status';
     }
   }
 
   const rows = $derived.by(() => {
     const filtered =
-      statusFilter === 'all' ? tasks : tasks.filter((t) => t.status === statusFilter);
-    const dir = sortAsc ? 1 : -1;
+      state.statusFilter === 'all' ? tasks : tasks.filter((t) => t.status === state.statusFilter);
+    const dir = state.sortAsc ? 1 : -1;
     return [...filtered].sort((a, b) => {
       let cmp = 0;
-      switch (sortKey) {
+      switch (state.sortKey) {
         case 'status':
           cmp = statusOrder[a.status] - statusOrder[b.status];
           break;
@@ -85,8 +85,8 @@
     {#each filterDefs as f (f.value)}
       <button
         class="chip"
-        class:active={statusFilter === f.value}
-        onclick={() => (statusFilter = f.value)}
+        class:active={state.statusFilter === f.value}
+        onclick={() => (state.statusFilter = f.value)}
       >
         {f.label}
         <span class="chip-count">
@@ -104,7 +104,7 @@
             <th>
               <button class="th-btn" onclick={() => setSort(h.key)}>
                 {h.label}
-                {#if sortKey === h.key}<span class="arrow">{sortAsc ? '▲' : '▼'}</span>{/if}
+                {#if state.sortKey === h.key}<span class="arrow">{state.sortAsc ? '▲' : '▼'}</span>{/if}
               </button>
             </th>
           {/each}

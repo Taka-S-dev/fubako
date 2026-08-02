@@ -6,8 +6,10 @@
   import { api } from '$lib/api';
   import type {
     AppConfig,
+    CalendarViewState,
     ChecklistItem,
     FolderEntry,
+    ListViewState,
     ProgressMode,
     Status,
     Task,
@@ -23,6 +25,20 @@
   let config = $state<AppConfig | null>(null);
   let tasks = $state<Task[]>([]);
   let view = $state<'board' | 'list' | 'cal' | 'dash'>('board');
+
+  // ビューは切り替えのたびに作り直されるため、表示条件はここで保持する
+  const listState = $state<ListViewState>({
+    statusFilter: 'all',
+    sortKey: 'activity',
+    sortAsc: false,
+  });
+  const calState = $state<CalendarViewState>({
+    year: new Date().getFullYear(),
+    month: new Date().getMonth(),
+    showStart: true,
+    showDue: true,
+    showDone: true,
+  });
   let loaded = $state(false);
   let query = $state('');
   let selectedPath = $state<string | null>(null);
@@ -674,9 +690,9 @@
   {:else}
     <div class="main">
       {#if view === 'list'}
-        <ListView tasks={filtered} {selectedPath} onselect={selectCard} />
+        <ListView tasks={filtered} {selectedPath} state={listState} onselect={selectCard} />
       {:else if view === 'cal'}
-        <CalendarView tasks={filtered} {selectedPath} onselect={selectCard} />
+        <CalendarView tasks={filtered} {selectedPath} state={calState} onselect={selectCard} />
       {:else if view === 'dash'}
         <Dashboard
           {tasks}
