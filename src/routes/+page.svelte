@@ -109,6 +109,67 @@
     });
   });
 
+  // 検索欄で # を打っている最中は、既存タグを候補として出す
+  let searchFocused = $state(false);
+  let searchHighlight = $state(-1);
+  let suggestDismissed = $state(false);
+
+  const tokens = $derived(query.split(/\s+/));
+  const activeTagPartial = $derived.by(() => {
+    const last = tokens[tokens.length - 1] ?? '';
+    return last.startsWith('#') || last.startsWith('＃') ? last.slice(1) : null;
+  });
+
+  const searchSuggestions = $derived.by(() => {
+    const partial = activeTagPartial;
+    if (partial === null || !searchFocused || suggestDismissed) return [];
+    const used = tokens
+      .slice(0, -1)
+      .filter((t) => t.startsWith('#') || t.startsWith('＃'))
+      .map((t) => t.slice(1).toLowerCase());
+    const q = partial.toLowerCase();
+    return allTags
+      .filter((t) => !used.includes(t.toLowerCase()) && (!q || t.toLowerCase().includes(q)))
+      .sort(
+        (a, b) =>
+          Number(b.toLowerCase().startsWith(q)) - Number(a.toLowerCase().startsWith(q))
+      )
+      .slice(0, 8);
+  });
+
+  function applyTagSuggestion(tag: string) {
+    const parts = query.split(/\s+/);
+    parts[parts.length - 1] = `#${tag}`;
+    query = `${parts.join(' ')} `;
+    searchHighlight = -1;
+    searchEl?.focus();
+  }
+
+  function onSearchKeydown(e: KeyboardEvent) {
+    if (e.isComposing) return;
+    const list = searchSuggestions;
+    if (e.key === 'Escape' && list.length) {
+      e.stopPropagation();
+      suggestDismissed = true;
+      searchHighlight = -1;
+      return;
+    }
+    if (!list.length) return;
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      e.stopPropagation();
+      searchHighlight = Math.min(searchHighlight + 1, list.length - 1);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      e.stopPropagation();
+      searchHighlight = Math.max(searchHighlight - 1, -1);
+    } else if (e.key === 'Enter' && searchHighlight >= 0) {
+      e.preventDefault();
+      e.stopPropagation();
+      applyTagSuggestion(list[searchHighlight]);
+    }
+  }
+
   const filterLabel = $derived.by(() => {
     const { tags, text } = terms;
     const parts: string[] = [];
@@ -513,9 +574,31 @@
         bind:value={query}
         placeholder="検索: 名前・タグ・メモ・日付　　#タグ名 でタグだけに限定   (Ctrl+F)"
         disabled={!configured}
+        oninput={() => {
+          suggestDismissed = false;
+          searchHighlight = -1;
+        }}
+        onkeydown={onSearchKeydown}
+        onfocus={() => (searchFocused = true)}
+        onblur={() => (searchFocused = false)}
       />
       {#if query}
         <button class="clear" onclick={clearQuery} aria-label="絞り込みを解除" title="絞り込みを解除 (Esc)">✕</button>
+      {/if}
+      {#if searchSuggestions.length > 0}
+        <ul class="search-suggest">
+          {#each searchSuggestions as tag, i (tag)}
+            <li>
+              <button
+                class:active={i === searchHighlight}
+                onmousedown={(e) => e.preventDefault()}
+                onclick={() => applyTagSuggestion(tag)}
+              >
+                <span class="hash">#</span>{tag}
+              </button>
+            </li>
+          {/each}
+        </ul>
       {/if}
     </div>
     <div class="top-actions">
@@ -543,7 +626,8 @@
     </div>
   </header>
 
-  {#if loaded && configured && query.trim()}
+  <!-- 記号だけ打っている途中は条件が無いので、バーはまだ出さない -->
+  {#if loaded && configured && (terms.tags.length > 0 || terms.text.length > 0)}
     <div class="filter-bar" role="status">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z" />
@@ -779,6 +863,40 @@
   }
   .clear:hover {
     color: var(--ink);
+  }
+  .search-suggest {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 12px;
+    right: 12px;
+    z-index: 30;
+    list-style: none;
+    margin: 0;
+    padding: 4px;
+    background: var(--surface);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-lift);
+    max-height: 240px;
+    overflow-y: auto;
+  }
+  .search-suggest button {
+    width: 100%;
+    text-align: left;
+    border: none;
+    background: none;
+    padding: 6px 10px;
+    border-radius: 5px;
+    font-size: 12.5px;
+  }
+  .search-suggest button:hover,
+  .search-suggest button.active {
+    background: var(--manila-soft);
+  }
+  .search-suggest .hash {
+    color: var(--manila);
+    font-weight: 700;
+    margin-right: 1px;
   }
   .top-actions {
     display: flex;
