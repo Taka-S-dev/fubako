@@ -57,6 +57,17 @@
 
   const configured = $derived(!!config?.work_root && !!config?.archive_root);
   const brandName = $derived(config?.display_name ?? 'Fubako');
+
+  // 表記ゆれを防ぐため、既存タグを使用頻度順に候補として渡す
+  const allTags = $derived.by(() => {
+    const counts = new Map<string, number>();
+    for (const t of tasks) {
+      for (const tag of t.tags) counts.set(tag, (counts.get(tag) ?? 0) + 1);
+    }
+    return [...counts.entries()]
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'ja'))
+      .map(([tag]) => tag);
+  });
   const selected = $derived(tasks.find((t) => t.path === selectedPath) ?? null);
 
   const filtered = $derived.by(() => {
@@ -601,6 +612,7 @@
         <DetailPanel
           task={selected}
           {entries}
+          alltags={allTags}
           candeep={!!config?.deep_archive_root}
           onclose={() => (selectedPath = null)}
           onopen={handleOpen}

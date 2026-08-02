@@ -5,6 +5,7 @@
   let {
     task,
     entries,
+    alltags = [],
     candeep = false,
     onclose,
     onopen,
@@ -17,6 +18,8 @@
   }: {
     task: Task;
     entries: FolderEntry[];
+    /** 他のタスクで使われているタグ。よく使う順 */
+    alltags?: string[];
     candeep?: boolean;
     onclose: () => void;
     onopen: (t: Task) => void;
@@ -39,7 +42,7 @@
 
   let currentPath = $state('');
   let status = $state<Status>('doing');
-  let tagsText = $state('');
+  let tags = $state<string[]>([]);
   let due = $state('');
   let memo = $state('');
   let checklist = $state<ChecklistItem[]>([]);
@@ -51,7 +54,8 @@
     if (task.path !== currentPath) {
       currentPath = task.path;
       status = task.status;
-      tagsText = task.tags.join(', ');
+      tags = [...task.tags];
+      tagInput = '';
       due = task.due ?? '';
       memo = task.memo;
       checklist = task.checklist.map((i) => ({ ...i }));
@@ -87,18 +91,66 @@
     if (e.key === 'Escape') renaming = false;
   }
 
-  const parsedTags = $derived(
-    tagsText
-      .split(/[,、\s]+/)
-      .map((s) => s.trim())
-      .filter(Boolean)
-  );
+  // タグはチップ操作のたびに保存するため、保存ボタンの対象には含めない
   const dirty = $derived(
-    status !== task.status ||
-      JSON.stringify(parsedTags) !== JSON.stringify(task.tags) ||
-      (due || null) !== task.due ||
-      memo !== task.memo
+    status !== task.status || (due || null) !== task.due || memo !== task.memo
   );
+
+  let tagInput = $state('');
+  let tagFocused = $state(false);
+  let tagHighlight = $state(-1);
+
+  const suggestions = $derived.by(() => {
+    const q = tagInput.trim().toLowerCase();
+    return alltags
+      .filter((t) => !tags.includes(t) && (!q || t.toLowerCase().includes(q)))
+      .slice(0, 6);
+  });
+
+  function addTag(raw: string) {
+    const value = raw.replace(/[,、]/g, '').trim();
+    tagInput = '';
+    tagHighlight = -1;
+    if (!value || tags.includes(value)) return;
+    tags.push(value);
+    save();
+  }
+
+  function removeTag(index: number) {
+    tags.splice(index, 1);
+    save();
+  }
+
+  function onTagKeydown(e: KeyboardEvent) {
+    // 日本語変換中の Enter は確定操作なのでタグ追加に使わない
+    if (e.isComposing) return;
+    if (e.key === 'Enter' || e.key === ',' || e.key === '、') {
+      e.preventDefault();
+      e.stopPropagation();
+      addTag(tagHighlight >= 0 ? suggestions[tagHighlight] : tagInput);
+    } else if (e.key === 'ArrowDown' && suggestions.length) {
+      e.preventDefault();
+      e.stopPropagation();
+      tagHighlight = Math.min(tagHighlight + 1, suggestions.length - 1);
+    } else if (e.key === 'ArrowUp' && suggestions.length) {
+      e.preventDefault();
+      e.stopPropagation();
+      tagHighlight = Math.max(tagHighlight - 1, -1);
+    } else if (e.key === 'Backspace' && !tagInput && tags.length) {
+      e.stopPropagation();
+      removeTag(tags.length - 1);
+    } else if (e.key === 'Escape' && (tagInput || tagHighlight >= 0)) {
+      // 候補を閉じるだけ。空のときは通常どおり上位へ渡す
+      e.stopPropagation();
+      tagInput = '';
+      tagHighlight = -1;
+    }
+  }
+
+  function onTagBlur() {
+    tagFocused = false;
+    if (tagInput.trim()) addTag(tagInput);
+  }
 
   // 手動なのに値が無い状態は「未設定」とみなし、やることがあれば自動計算に戻す
   const manualMode = $derived(
@@ -122,7 +174,7 @@
   });
 
   function save() {
-    onsave(task, status, parsedTags, due || null, memo, checklist, manualProgress, progressMode);
+    onsave(task, status, tags, due || null, memo, checklist, manualProgress, progressMode);
   }
 
   function setMode(mode: ProgressMode) {
@@ -323,13 +375,42 @@
       </div>
     </div>
     {/if}
-    <div class="row">
+    <div class="row tag-row">
       <span class="label">タグ</span>
-      <input
-        class="field"
-        bind:value={tagsText}
-        placeholder="調査, 顧客A （カンマ・空白区切り）"
-      />
+      <div class="tag-field" class:focused={tagFocused}>
+        <div class="chips">
+          {#each tags as tag, i (tag)}
+            <span class="chip">
+              {tag}
+              <button class="chip-x" onclick={() => removeTag(i)} aria-label="{tag} を外す">✕</button>
+            </span>
+          {/each}
+          <input
+            class="tag-input"
+            bind:value={tagInput}
+            placeholder={tags.length ? '' : 'タグを追加'}
+            onkeydown={onTagKeydown}
+            onfocus={() => (tagFocused = true)}
+            onblur={onTagBlur}
+            aria-label="タグを追加"
+          />
+        </div>
+        {#if tagFocused && suggestions.length > 0}
+          <ul class="suggest">
+            {#each suggestions as s, i (s)}
+              <li>
+                <button
+                  class:active={i === tagHighlight}
+                  onmousedown={(e) => e.preventDefault()}
+                  onclick={() => addTag(s)}
+                >
+                  {s}
+                </button>
+              </li>
+            {/each}
+          </ul>
+        {/if}
+      </div>
     </div>
     <div class="row">
       <span class="label">期限</span>
@@ -543,6 +624,93 @@
   .memo-row {
     align-items: start;
   }
+  /* タグは区切り記号を覚えずに済むよう、チップと候補で操作する */
+  .tag-row {
+    align-items: start;
+  }
+  .tag-field {
+    position: relative;
+    min-width: 0;
+  }
+  .chips {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 6px;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius);
+    background: var(--surface);
+    min-height: 30px;
+  }
+  .tag-field.focused .chips {
+    outline: 2px solid var(--focus);
+    outline-offset: -1px;
+  }
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    background: var(--manila-soft);
+    border: 1px solid var(--manila-tab);
+    color: #7a5310;
+    border-radius: 99px;
+    padding: 1px 4px 1px 9px;
+    font-size: 11.5px;
+    max-width: 100%;
+  }
+  .chip-x {
+    border: none;
+    background: none;
+    color: #a8792c;
+    font-size: 9px;
+    line-height: 1;
+    padding: 2px 3px;
+    border-radius: 99px;
+  }
+  .chip-x:hover {
+    background: var(--manila);
+    color: #fff;
+  }
+  .tag-input {
+    flex: 1;
+    min-width: 70px;
+    border: none;
+    outline: none;
+    background: none;
+    padding: 2px;
+    font-size: 12.5px;
+  }
+  .suggest {
+    position: absolute;
+    top: calc(100% + 3px);
+    left: 0;
+    right: 0;
+    z-index: 5;
+    list-style: none;
+    margin: 0;
+    padding: 3px;
+    background: var(--surface);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-lift);
+    max-height: 168px;
+    overflow-y: auto;
+  }
+  .suggest button {
+    width: 100%;
+    text-align: left;
+    border: none;
+    background: none;
+    padding: 5px 8px;
+    border-radius: 5px;
+    font-size: 12px;
+  }
+  .suggest button:hover,
+  .suggest button.active {
+    background: var(--manila-soft);
+  }
+
   /* 進捗は状態の隣に置き、パネルを開いた時点で見えるようにする */
   .progress-row {
     align-items: center;
