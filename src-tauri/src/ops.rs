@@ -58,20 +58,18 @@ fn move_dir(src: &Path, dest: &Path) -> Result<(), String> {
             ))
         }
     }
-    let tmp = dest.with_file_name(format!(".fubako-moving-{}", std::process::id()));
-    if tmp.exists() {
-        let _ = fs::remove_dir_all(&tmp);
-    }
+    // 自分が作ったものだけを片付けられるよう、既存と衝突しない名前を使う
+    let tmp = unique_dest(parent, ".fubako-moving");
     if let Err(e) = copy_dir_recursive(&src_c, &tmp) {
-        let _ = fs::remove_dir_all(&tmp);
-        return Err(format!(
-            "コピーに失敗したため中止しました（元のフォルダは変更されていません）: {e}"
+        return Err(discard_copy(
+            &tmp,
+            format!("コピーに失敗したため中止しました（元のフォルダは変更されていません）: {e}"),
         ));
     }
     if let Err(e) = fs::rename(&tmp, dest) {
-        let _ = fs::remove_dir_all(&tmp);
-        return Err(format!(
-            "移動先の確定に失敗しました（元のフォルダは変更されていません）: {e}"
+        return Err(discard_copy(
+            &tmp,
+            format!("移動先の確定に失敗しました（元のフォルダは変更されていません）: {e}"),
         ));
     }
     fs::remove_dir_all(&src_c).map_err(|e| {
@@ -80,6 +78,18 @@ fn move_dir(src: &Path, dest: &Path) -> Result<(), String> {
              同じフォルダが2箇所にあるため、移動元を手動で削除してください: {e}"
         )
     })
+}
+
+/// 中断したコピーを破棄する。移動元にはまだ触れていないためコピー側に固有の
+/// データはなく、捨てて構わない。捨てられなかったときだけ残骸の場所を伝える
+fn discard_copy(tmp: &Path, message: String) -> String {
+    match fs::remove_dir_all(tmp) {
+        Ok(()) => message,
+        Err(_) => format!(
+            "{message}（作業用フォルダ {} が残っています。手動で削除してください）",
+            tmp.display()
+        ),
+    }
 }
 
 fn copy_dir_recursive(src: &Path, dest: &Path) -> Result<(), String> {
@@ -706,5 +716,32 @@ mod tests {
         let err = rename_folder(&src, "別名", "20260802_調査").unwrap_err();
         assert!(err.contains("開いていないか"), "unexpected: {err}");
         assert!(src.exists());
+    }
+
+    #[test]
+    fn discard_copy_removes_the_temporary_copy() {
+        let dir = tempfile::tempdir().unwrap();
+        let tmp = dir.path().join(".fubako-moving");
+        fs::create_dir_all(tmp.join("sub")).unwrap();
+        fs::write(tmp.join("sub").join("a.txt"), "a").unwrap();
+
+        let message = discard_copy(&tmp, "中止しました".to_string());
+        // 片付けに成功したときは残骸の案内を足さない
+        assert_eq!(message, "中止しました");
+        assert!(!tmp.exists());
+    }
+
+    #[test]
+    fn move_dir_keeps_unrelated_temporary_folders() {
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path().join("src");
+        fs::create_dir_all(&src).unwrap();
+        // 別プロセスが残したものを消してしまわないこと
+        let stale = dir.path().join(".fubako-moving");
+        fs::create_dir_all(&stale).unwrap();
+        fs::write(stale.join("keep.txt"), "keep").unwrap();
+
+        move_dir(&src, &dir.path().join("dest")).unwrap();
+        assert_eq!(fs::read_to_string(stale.join("keep.txt")).unwrap(), "keep");
     }
 }
