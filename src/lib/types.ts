@@ -54,6 +54,8 @@ export interface FolderEntry {
   is_dir: boolean;
   size: number;
   modified: string | null;
+  /** シェルが持つ種類アイコンの data URI。取得できなければ null */
+  icon: string | null;
 }
 
 export interface AppConfig {

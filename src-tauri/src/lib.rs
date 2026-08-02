@@ -1,5 +1,6 @@
 mod config;
 mod explorer;
+mod icons;
 mod model;
 mod ops;
 mod scan;

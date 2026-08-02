@@ -516,7 +516,11 @@
               onclick={() => onopenentry(task, entry)}
               title={entry.is_dir ? `${entry.name} をエクスプローラーで開く` : `${entry.name} を開く`}
             >
-              <span class="ficon">{entry.is_dir ? '▸' : '·'}</span>
+              {#if entry.icon}
+                <img class="ficon" src={entry.icon} alt="" width="16" height="16" />
+              {:else}
+                <span class="ficon">{entry.is_dir ? '▸' : '·'}</span>
+              {/if}
               <span class="fname">{entry.name}</span>
               <span class="fmeta mono">
                 {entry.is_dir ? '' : fmtSize(entry.size)}
@@ -999,8 +1003,14 @@
   }
   .ficon {
     color: var(--manila);
-    width: 10px;
+    width: 16px;
     flex: none;
+    text-align: center;
+  }
+  /* 32px で取り出したものを縮めて描くので、拡大率が高い画面でも粗くならない */
+  img.ficon {
+    height: 16px;
+    object-fit: contain;
   }
   .fname {
     flex: 1;

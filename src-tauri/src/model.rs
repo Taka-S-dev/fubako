@@ -90,6 +90,8 @@ pub struct FolderEntry {
     pub is_dir: bool,
     pub size: u64,
     pub modified: Option<String>,
+    /// シェルが持つ種類アイコンの data URI。取得できなければ None
+    pub icon: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

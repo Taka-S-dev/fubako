@@ -26,15 +26,20 @@ chrono = { version = "0.4", features = ["serde"] }
 notify = "8"
 
 [target.'cfg(windows)'.dependencies]
-# 開いているエクスプローラーのウィンドウを列挙して再利用するために使う
+# エクスプローラーのウィンドウ列挙と、シェルのファイルアイコン取得に使う
 windows = { version = "0.61", features = [
     "Win32_Foundation",
+    "Win32_Graphics_Gdi",
+    "Win32_Storage_FileSystem",
     "Win32_System_Com",
     "Win32_System_Ole",
     "Win32_System_Variant",
     "Win32_UI_Shell",
     "Win32_UI_WindowsAndMessaging",
 ] }
+# 取り出したアイコンを data URI で画面へ渡すために使う
+png = "0.17"
+base64 = "0.22"
 
 [dev-dependencies]
 tempfile = "3"

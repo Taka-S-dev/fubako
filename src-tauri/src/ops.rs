@@ -548,6 +548,7 @@ pub async fn list_folder(
                 name: e.file_name().to_string_lossy().to_string(),
                 is_dir: meta.is_dir(),
                 size: if meta.is_dir() { 0 } else { meta.len() },
+                icon: crate::icons::data_uri(&e.path(), meta.is_dir()),
                 modified,
             })
         })
