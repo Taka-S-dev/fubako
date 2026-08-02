@@ -319,12 +319,14 @@
       <div class="p-body">
         {#if manualMode}
           <div class="p-line">
+            <!-- 自動モードのバーと同じく、進んだぶんを左から塗る -->
             <input
               type="range"
               min="0"
               max="100"
               step="5"
               value={manualProgress ?? 0}
+              style="--filled: {manualProgress ?? 0}%"
               oninput={(e) => (manualProgress = Number(e.currentTarget.value))}
               onchange={save}
               aria-label="進捗率"
@@ -736,13 +738,17 @@
     align-items: center;
     gap: 8px;
   }
-  /* 既定のトラックは濃く「満タン」に見えるため、進捗バーと同じ淡色に揃える */
+  /* 既定のトラックは濃く「満タン」に見えるため、進捗バーと同じ配色に揃える */
   .p-line input[type='range'] {
     flex: 1;
     min-width: 0;
     height: 5px;
     appearance: none;
-    background: var(--slate-soft);
+    background: linear-gradient(
+      to right,
+      var(--manila) var(--filled, 0%),
+      var(--slate-soft) var(--filled, 0%)
+    );
     border-radius: 99px;
   }
   .p-line input[type='range']::-webkit-slider-thumb {
