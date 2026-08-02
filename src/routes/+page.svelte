@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { listen } from '@tauri-apps/api/event';
   import { getCurrentWebview } from '@tauri-apps/api/webview';
+  import { getCurrentWindow } from '@tauri-apps/api/window';
   import { ask, open as openDialog } from '@tauri-apps/plugin-dialog';
   import { api } from '$lib/api';
   import type {
@@ -436,6 +437,18 @@
     await handleSaveSettings({ ...config, work_root: obWork, archive_root: obArchive }, autostart);
   }
 
+  // 付箋のように脇へ置いておくためのモード。ウィンドウは細く縮められる
+  let pinned = $state(false);
+  async function togglePinned() {
+    const next = !pinned;
+    try {
+      await getCurrentWindow().setAlwaysOnTop(next);
+      pinned = next;
+    } catch (e) {
+      toast(String(e), 'error');
+    }
+  }
+
   function clearQuery() {
     query = '';
     searchEl?.focus();
@@ -566,7 +579,7 @@
           opacity="0.85"
         />
       </svg>
-      {#if brandName}{brandName}{/if}
+      {#if brandName}<span class="brand-name">{brandName}</span>{/if}
     </div>
     <nav class="view-seg" aria-label="表示切り替え">
       <button class="view-btn" class:active={view === 'board'} onclick={() => (view = 'board')}>
@@ -620,6 +633,29 @@
     <div class="top-actions">
       <button class="btn primary" onclick={() => (showCreate = true)} disabled={!configured}>
         ＋ 新しい作業
+      </button>
+      <button
+        class="btn gear"
+        class:pinned
+        onclick={togglePinned}
+        aria-pressed={pinned}
+        aria-label="常に最前面に表示"
+        title={pinned ? '常に最前面: オン' : '常に最前面に表示'}
+      >
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill={pinned ? 'currentColor' : 'none'}
+          stroke="currentColor"
+          stroke-width="1.8"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M12 17v5" />
+          <path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z" />
+        </svg>
       </button>
       <button class="btn gear" onclick={() => (showSettings = true)} aria-label="設定" title="設定">
         <svg
@@ -956,12 +992,43 @@
   .gear svg {
     display: block;
   }
+  .gear.pinned {
+    background: var(--manila-soft);
+    border-color: var(--manila);
+    color: #7a5310;
+  }
 
   .center-note {
     flex: 1;
     display: grid;
     place-items: center;
     color: var(--ink-3);
+  }
+
+  /* 付箋のように細くしたときは、ヘッダーを削って一覧に幅を渡す */
+  @media (max-width: 720px) {
+    .topbar {
+      gap: 8px;
+      padding: 8px 10px;
+    }
+    .brand-name {
+      display: none;
+    }
+    .view-btn {
+      padding: 6px 9px;
+    }
+  }
+  /* さらに狭いときは操作を隠さず、検索欄を次の行へ送る */
+  @media (max-width: 620px) {
+    .topbar {
+      flex-wrap: wrap;
+    }
+    .search-wrap {
+      order: 3;
+      flex-basis: 100%;
+      max-width: none;
+      margin: 0;
+    }
   }
 
   .main {
