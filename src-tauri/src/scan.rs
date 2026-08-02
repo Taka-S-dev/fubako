@@ -359,4 +359,5 @@ mod tests {
         assert!(!names.iter().any(|n| n.contains("古い")));
         assert!(tasks.iter().find(|t| t.name == "完了B").unwrap().archived);
     }
+
 }

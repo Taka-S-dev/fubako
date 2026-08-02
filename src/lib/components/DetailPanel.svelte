@@ -128,7 +128,7 @@
     save();
   }
 
-  // チェックリスト操作は待たせず即保存する
+  // やることの操作は待たせず即保存する
   function toggleItem(index: number) {
     checklist[index].done = !checklist[index].done;
     save();
@@ -243,6 +243,76 @@
         <span>{fmtDateTime(task.completed_at)}</span>
       </div>
     {/if}
+    <div class="row progress-row">
+      <span class="label">進捗</span>
+      <div class="p-body">
+        {#if manualMode}
+          <div class="p-line">
+            <input
+              type="range"
+              min="0"
+              max="100"
+              step="5"
+              value={manualProgress ?? 0}
+              oninput={(e) => (manualProgress = Number(e.currentTarget.value))}
+              onchange={save}
+              aria-label="進捗率"
+            />
+            <span class="p-value mono">
+              {manualProgress !== null ? `${manualProgress}%` : '—'}
+            </span>
+            {#if manualProgress !== null}
+              <button
+                class="icon-btn"
+                onclick={() => {
+                  manualProgress = null;
+                  save();
+                }}
+                title="進捗をクリア"
+              >
+                ✕
+              </button>
+            {/if}
+          </div>
+        {:else}
+          <div class="p-line">
+            <div
+              class="bar"
+              role="progressbar"
+              aria-valuenow={localProgress}
+              aria-valuemin={0}
+              aria-valuemax={100}
+            >
+              <div class="fill" style="width: {localProgress}%"></div>
+            </div>
+            <span class="p-value mono">{localProgress}%</span>
+          </div>
+        {/if}
+        {#if (localRemaining !== null && localRemaining > 0) || checklist.length > 0}
+          <div class="p-meta">
+            {#if localRemaining !== null && localRemaining > 0}
+              <span>残り{fmtMinutes(localRemaining)}</span>
+            {/if}
+            {#if checklist.length > 0}
+              <span class="mode-seg" role="radiogroup" aria-label="進捗の計算方法">
+                <button
+                  class="mode-btn"
+                  class:active={progressMode === 'auto'}
+                  onclick={() => setMode('auto')}
+                  title="やることの消化から自動計算">自動</button
+                >
+                <button
+                  class="mode-btn"
+                  class:active={progressMode === 'manual'}
+                  onclick={() => setMode('manual')}
+                  title="スライダーで手動入力">手動</button
+                >
+              </span>
+            {/if}
+          </div>
+        {/if}
+      </div>
+    </div>
     <div class="row">
       <span class="label">タグ</span>
       <input
@@ -268,69 +338,9 @@
   </section>
 
   <section class="checklist">
-    <h3>
-      チェックリスト
-      {#if localProgress !== null}
-        <span class="p-summary">
-          {localProgress}%
-          {#if localRemaining !== null && localRemaining > 0}
-            · 残り{fmtMinutes(localRemaining)}
-          {/if}
-        </span>
-      {/if}
-      {#if checklist.length > 0}
-        <span class="mode-seg" role="radiogroup" aria-label="進捗の計算方法">
-          <button
-            class="mode-btn"
-            class:active={progressMode === 'auto'}
-            onclick={() => setMode('auto')}
-            title="チェックリストから自動計算">自動</button
-          >
-          <button
-            class="mode-btn"
-            class:active={progressMode === 'manual'}
-            onclick={() => setMode('manual')}
-            title="スライダーで手動入力">手動</button
-          >
-        </span>
-      {/if}
-    </h3>
-    {#if localProgress !== null}
-      <div class="bar" role="progressbar" aria-valuenow={localProgress} aria-valuemin={0} aria-valuemax={100}>
-        <div class="fill" style="width: {localProgress}%"></div>
-      </div>
-    {/if}
-
-    {#if manualMode}
-      <div class="manual">
-        <span class="label">進捗（手動）</span>
-        <input
-          type="range"
-          min="0"
-          max="100"
-          step="5"
-          value={manualProgress ?? 0}
-          oninput={(e) => (manualProgress = Number(e.currentTarget.value))}
-          onchange={save}
-          aria-label="進捗率"
-        />
-        <span class="p-val mono">{manualProgress !== null ? `${manualProgress}%` : '—'}</span>
-        {#if manualProgress !== null}
-          <button
-            class="icon-btn"
-            onclick={() => {
-              manualProgress = null;
-              save();
-            }}
-            title="進捗をクリア"
-          >
-            ✕
-          </button>
-        {/if}
-      </div>
-      {#if checklist.length === 0}
-        <p class="hint">項目を追加するとチェックリストから自動計算に切り替わります</p>
-      {/if}
+    <h3>やること</h3>
+    {#if checklist.length === 0}
+      <p class="hint">追加すると、消化状況から進捗を自動計算します</p>
     {/if}
 
     {#if checklist.length > 0}
@@ -523,6 +533,57 @@
   .memo-row {
     align-items: start;
   }
+  /* 進捗は状態の隣に置き、パネルを開いた時点で見えるようにする */
+  .progress-row {
+    align-items: center;
+  }
+  .p-body {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+  }
+  .p-line {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  /* 既定のトラックは濃く「満タン」に見えるため、進捗バーと同じ淡色に揃える */
+  .p-line input[type='range'] {
+    flex: 1;
+    min-width: 0;
+    height: 5px;
+    appearance: none;
+    background: var(--slate-soft);
+    border-radius: 99px;
+  }
+  .p-line input[type='range']::-webkit-slider-thumb {
+    appearance: none;
+    width: 13px;
+    height: 13px;
+    border-radius: 50%;
+    background: var(--manila);
+    border: 2px solid var(--surface);
+    box-shadow: 0 0 0 1px var(--line-strong);
+    cursor: pointer;
+  }
+  .p-value {
+    width: 38px;
+    text-align: right;
+    font-size: 11.5px;
+    color: var(--ink-2);
+    flex: none;
+  }
+  .p-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+    color: var(--ink-3);
+  }
+  .p-meta .mode-seg {
+    margin-left: auto;
+  }
   .memo-row .label {
     padding-top: 7px;
   }
@@ -559,7 +620,7 @@
     justify-content: flex-end;
   }
 
-  /* チェックリスト */
+  /* やること */
   .checklist {
     padding: 12px 16px;
     border-bottom: 1px solid var(--line);
@@ -569,16 +630,8 @@
     font-size: 12px;
     color: var(--ink-2);
     font-weight: 600;
-    display: flex;
-    align-items: baseline;
-    gap: 8px;
-  }
-  .p-summary {
-    font-weight: 500;
-    color: var(--manila);
   }
   .mode-seg {
-    margin-left: auto;
     display: inline-flex;
     border: 1px solid var(--line-strong);
     border-radius: 6px;
@@ -599,11 +652,11 @@
     color: #fff;
   }
   .bar {
+    flex: 1;
     height: 5px;
     border-radius: 99px;
     background: var(--slate-soft);
     overflow: hidden;
-    margin-bottom: 10px;
   }
   .fill {
     height: 100%;
@@ -671,22 +724,6 @@
   }
   .step + .step {
     border-top: 1px solid var(--line);
-  }
-  .manual {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 4px;
-  }
-  .manual input[type='range'] {
-    flex: 1;
-    accent-color: var(--manila);
-  }
-  .p-val {
-    width: 40px;
-    text-align: right;
-    font-size: 11.5px;
-    color: var(--ink-2);
   }
   .hint {
     margin: 2px 0 8px;
