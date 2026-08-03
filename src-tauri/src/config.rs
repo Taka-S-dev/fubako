@@ -3,8 +3,13 @@ use std::fs;
 use std::path::PathBuf;
 use tauri::{AppHandle, Manager};
 
+/// 設定の置き場所は `%APPDATA%\Fubako\config.json`。
+/// `app_config_dir()` は逆ドメイン形式の識別子をそのままフォルダ名にするため、
+/// 製品名でフォルダが並ぶ Windows の %APPDATA% では浮いてしまう。
+/// フォルダ名は productName から取り、設定と表記がずれないようにする
 fn config_path(app: &AppHandle) -> Option<PathBuf> {
-    app.path().app_config_dir().ok().map(|d| d.join("config.json"))
+    let dir = app.path().config_dir().ok()?;
+    Some(dir.join(&app.package_info().name).join("config.json"))
 }
 
 pub fn load(app: &AppHandle) -> AppConfig {
