@@ -31,6 +31,9 @@ jobs:
       - name: Type check
         run: npm run check
 
+      - name: Frontend test
+        run: npm test
+
       # tauri-build は frontendDist の存在を前提にするため cargo より先に実行する
       - name: Build frontend
         run: npm run build
