@@ -79,7 +79,21 @@ export function fmtMinutes(min: number): string {
   return Number.isInteger(h) ? `${h}h` : `${h.toFixed(1)}h`;
 }
 
+/**
+ * ローカル時刻の "YYYY-MM-DD"。
+ * 期限や完了日は端末のカレンダー上の日付で比べるものなので、
+ * UTC を返す `toISOString()` を使うと時差のぶんだけ日付がずれる
+ * （日本時間なら毎日 0:00〜9:00 の間、前日として扱われる）
+ */
+export function isoDate(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+/** ローカル時刻の "YYYY-MM" */
+export function isoMonth(d: Date): string {
+  return isoDate(d).slice(0, 7);
+}
+
 export function todayPrefix(): string {
-  const d = new Date();
-  return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
+  return isoDate(new Date()).replaceAll('-', '');
 }

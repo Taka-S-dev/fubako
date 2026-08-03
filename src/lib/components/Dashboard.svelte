@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Task } from '$lib/types';
-  import { daysSince, fmtMinutes, relativeDays } from '$lib/format';
+  import { daysSince, fmtMinutes, isoDate, isoMonth, relativeDays } from '$lib/format';
 
   let {
     tasks,
@@ -24,7 +24,7 @@
     return iso.slice(0, 7); // YYYY-MM
   }
 
-  const thisMonth = $derived(new Date().toISOString().slice(0, 7));
+  const thisMonth = $derived(isoMonth(new Date()));
   const doneThisMonth = $derived(
     tasks.filter((t) => t.archived && t.completed_at && monthKey(t.completed_at) === thisMonth)
       .length
@@ -43,7 +43,7 @@
   const dueList = $derived.by(() => {
     const limit = new Date();
     limit.setDate(limit.getDate() + 7);
-    const limitStr = limit.toISOString().slice(0, 10);
+    const limitStr = isoDate(limit);
     return active
       .filter((t) => t.due && t.due <= limitStr)
       .sort((a, b) => (a.due ?? '').localeCompare(b.due ?? ''))
@@ -70,7 +70,7 @@
 
   let hoverMonth = $state<string | null>(null);
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = isoDate(new Date());
 
   // ディープアーカイブ整理の対象: 完了(なければ最終更新)から deepMonths か月超
   const deepCandidates = $derived.by(() => {
