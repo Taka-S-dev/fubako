@@ -538,13 +538,11 @@
           task={selected}
           {listing}
           alltags={allTags}
-          candeep={!!config?.deep_archive_root}
           onclose={() => (selectedPath = null)}
           onopen={handleOpen}
           oncopy={handleCopyPath}
           oncomplete={handleComplete}
           onreopen={handleReopen}
-          ondeeparchive={handleDeepArchiveOne}
           onrename={handleRename}
           onsave={handleSaveMeta}
           onopenentry={handleOpenEntry}

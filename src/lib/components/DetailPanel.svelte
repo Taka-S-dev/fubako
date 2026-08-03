@@ -13,13 +13,11 @@
     task,
     listing,
     alltags = [],
-    candeep = false,
     onclose,
     onopen,
     oncopy,
     oncomplete,
     onreopen,
-    ondeeparchive,
     onrename,
     onsave,
     onopenentry,
@@ -29,13 +27,11 @@
     listing: FolderListing;
     /** 他のタスクで使われているタグ。よく使う順 */
     alltags?: string[];
-    candeep?: boolean;
     onclose: () => void;
     onopen: (t: Task) => void;
     oncopy: (t: Task) => void;
     oncomplete: (t: Task) => void;
     onreopen: (t: Task) => void;
-    ondeeparchive: (t: Task) => void;
     onrename: (t: Task, name: string) => void;
     onsave: (
       t: Task,
@@ -290,11 +286,10 @@
       <button class="btn" onclick={() => onopen(task)}>エクスプローラーで開く</button>
       <button class="btn" onclick={() => oncopy(task)}>パスをコピー</button>
       {#if task.archived}
+        <!-- ディープアーカイブへの退避はまれで戻しにくいため、カードの右クリックへ置いている -->
         <button class="btn" onclick={() => onreopen(task)}>作業に戻す</button>
-        {#if candeep}
-          <button class="btn" onclick={() => ondeeparchive(task)}>ディープアーカイブへ</button>
-        {/if}
       {:else}
+        <span class="break"></span>
         <button class="btn primary" onclick={() => oncomplete(task)}>完了してアーカイブ</button>
       {/if}
     </div>
@@ -653,6 +648,13 @@
   .actions .btn {
     padding: 5px 10px;
     font-size: 12px;
+  }
+  /* 主操作の手前で必ず改行する。パネルは幅が狭く、ラベルの長さ次第で
+     折り返しの位置が変わるため、成り行きに任せると崩れて見える。
+     ボタン自体は文字なりの幅のまま（主操作は色が濃く、伸ばすと帯になる） */
+  .actions .break {
+    flex-basis: 100%;
+    height: 0;
   }
 
   .meta {
