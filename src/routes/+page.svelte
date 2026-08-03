@@ -350,6 +350,16 @@
     }
   }
 
+  // ホットキーで呼び出したあと、手をマウスへ移さずにしまえるようにする。
+  // 閉じるボタンと同じくトレイへ格納するだけで、終了はしない
+  async function hideToTray() {
+    try {
+      await getCurrentWindow().hide();
+    } catch (e) {
+      toast(String(e), 'error');
+    }
+  }
+
   function onKeydown(e: KeyboardEvent) {
     if (e.key === 'Escape') {
       if (showCreate) showCreate = false;
@@ -357,6 +367,9 @@
       // 絞り込み中はまず解除する（フィルタバーの案内と一致させる）
       else if (query) topBar?.clear();
       else if (selectedPath) selectedPath = null;
+      // 解除するものが無くなったらウィンドウ自体をしまう。
+      // 初期設定中だけは、行き先が分からなくなるので残す
+      else if (configured) hideToTray();
       return;
     }
     const inField =
