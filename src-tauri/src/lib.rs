@@ -13,6 +13,8 @@ use tauri::{Emitter, Manager};
 pub struct AppState {
     pub config: Mutex<model::AppConfig>,
     pub watcher: Mutex<watch::WatcherHandle>,
+    /// 起動時に伝えられなかった不具合。画面が出てから一度だけ取り出す
+    pub startup_warning: Mutex<Option<String>>,
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -39,16 +41,18 @@ pub fn run() {
         )
         .setup(|app| {
             let cfg = config::load(app.handle());
+            // リリースビルドには標準エラー出力が無いため、画面へ渡せるよう持っておく
+            let warning = ops::register_hotkey(app.handle(), &cfg.hotkey)
+                .err()
+                .map(|e| format!("ホットキーを登録できませんでした: {e}"));
             app.manage(AppState {
                 config: Mutex::new(cfg.clone()),
                 watcher: Mutex::new(None),
+                startup_warning: Mutex::new(warning),
             });
             watch::restart(app.handle(), &cfg);
             tray::setup(app)?;
             ops::apply_display_name(app.handle(), &cfg);
-            if let Err(e) = ops::register_hotkey(app.handle(), &cfg.hotkey) {
-                eprintln!("ホットキー登録に失敗: {e}");
-            }
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -69,6 +73,7 @@ pub fn run() {
             ops::reopen_task,
             ops::import_task,
             ops::deep_archive_task,
+            ops::take_startup_warning,
             ops::open_in_explorer,
             ops::open_entry,
             ops::list_folder,

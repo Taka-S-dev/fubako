@@ -211,19 +211,29 @@ pub async fn get_config(state: State<'_, AppState>) -> Result<AppConfig, String>
     Ok(state.config.lock().unwrap().clone())
 }
 
+/// 保存自体は成功したが伝えるべきことがある場合に、その文言を返す。
+/// ホットキーを他のアプリに取られていても、他の設定まで保存できないのは困る
 #[tauri::command]
 pub async fn set_config(
     app: AppHandle,
     state: State<'_, AppState>,
     config: AppConfig,
-) -> Result<(), String> {
+) -> Result<Option<String>, String> {
     validate_roots(&config)?;
     config::save(&app, &config)?;
     apply_display_name(&app, &config);
-    let hotkey_result = register_hotkey(&app, &config.hotkey);
+    let warning = register_hotkey(&app, &config.hotkey)
+        .err()
+        .map(|e| format!("設定は保存しましたが、ホットキーを登録できませんでした: {e}"));
     *state.config.lock().unwrap() = config.clone();
     watch::restart(&app, &config);
-    hotkey_result
+    Ok(warning)
+}
+
+/// 起動時の警告を取り出す。画面が出てから一度だけ伝えたいので、読んだら消す
+#[tauri::command]
+pub async fn take_startup_warning(state: State<'_, AppState>) -> Result<Option<String>, String> {
+    Ok(state.startup_warning.lock().unwrap().take())
 }
 
 #[tauri::command]
@@ -699,6 +709,26 @@ mod tests {
         assert!(ensure_managed(&sneaky, &config).is_err());
         // 存在しないパスも拒否
         assert!(ensure_managed(&work.join("なし"), &config).is_err());
+    }
+
+    #[test]
+    fn hotkey_accepts_what_the_settings_screen_produces() {
+        // 設定画面が組み立てる形式は、どれもそのまま登録できる
+        for accel in [
+            "Ctrl+Alt+KeyE",
+            "Ctrl+Shift+Digit1",
+            "Alt+F5",
+            "Ctrl+Alt+Space",
+            "Ctrl+Alt+ArrowUp",
+        ] {
+            assert!(accel.parse::<Shortcut>().is_ok(), "登録できない: {accel}");
+        }
+        // 修飾キーが無くても解釈は通る。単独キーを全体のホットキーにすると
+        // どのアプリでもその文字が打てなくなるため、弾くのは設定画面側の責任
+        assert!("KeyE".parse::<Shortcut>().is_ok());
+        // 解釈できないのは、キーが欠けている場合と綴りが違う場合だけ
+        assert!("Ctrl+Alt+".parse::<Shortcut>().is_err());
+        assert!("Hoge+KeyE".parse::<Shortcut>().is_err());
     }
 
     #[test]

@@ -99,6 +99,9 @@
       config = await api.getConfig();
       autostart = await api.getAutostart().catch(() => false);
       await refresh();
+      // 起動時に伝えられなかった不具合は、画面が出たこの時点で知らせる
+      const warning = await api.takeStartupWarning().catch(() => null);
+      if (warning) toast(warning, 'error');
     } catch (e) {
       toast(String(e), 'error');
     } finally {
@@ -308,13 +311,14 @@
 
   async function handleSaveSettings(next: AppConfig, auto: boolean) {
     try {
-      await api.setConfig(next);
+      const warning = await api.setConfig(next);
       config = next;
       await api.setAutostart(auto).catch(() => {});
       autostart = auto;
       showSettings = false;
       await refresh();
-      toast('設定を保存しました');
+      // 保存自体は済んでいるので、伝えることがあっても閉じるところまでは進める
+      toast(warning ?? '設定を保存しました', warning ? 'error' : 'info');
     } catch (e) {
       toast(String(e), 'error');
     }

@@ -10,7 +10,9 @@ import type {
 
 export const api = {
   getConfig: () => invoke<AppConfig>('get_config'),
-  setConfig: (config: AppConfig) => invoke<void>('set_config', { config }),
+  /** 保存は成功しても伝えることがあれば文言が返る（ホットキーを取られていた等） */
+  setConfig: (config: AppConfig) => invoke<string | null>('set_config', { config }),
+  takeStartupWarning: () => invoke<string | null>('take_startup_warning'),
   listTasks: () => invoke<Task[]>('list_tasks'),
   createTask: (name: string, useTemplate: boolean) =>
     invoke<Task>('create_task', { name, useTemplate }),

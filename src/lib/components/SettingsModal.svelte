@@ -1,5 +1,6 @@
 <script lang="ts">
   import { open as openDialog } from '@tauri-apps/plugin-dialog';
+  import { accelFromEvent, formatAccel, isModifier } from '$lib/hotkey';
   import type { AppConfig } from '$lib/types';
 
   let {
@@ -58,8 +59,44 @@
     );
   }
 
+  // ホットキーは記法を覚えずに済むよう、実際に押した組み合わせを取り込む
+  let recording = $state(false);
+  let rejected = $state(false);
+
+  function startRecording() {
+    recording = true;
+    rejected = false;
+  }
+
+  function onHotkeyKeydown(e: KeyboardEvent) {
+    if (!recording) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.key === 'Escape') {
+      recording = false;
+      return;
+    }
+    // 修飾キーだけ押している間は待つ
+    if (isModifier(e.code)) return;
+    const accel = accelFromEvent(e);
+    if (!accel) {
+      rejected = true;
+      return;
+    }
+    hotkey = accel;
+    recording = false;
+    rejected = false;
+  }
+
+  function clearHotkey() {
+    hotkey = '';
+    recording = false;
+    rejected = false;
+  }
+
   function onkeydown(e: KeyboardEvent) {
-    if (e.key === 'Escape') onclose();
+    // 記録中の Esc は記録の取り消しに使うので、設定は閉じない
+    if (e.key === 'Escape' && !recording) onclose();
   }
 </script>
 
@@ -108,8 +145,34 @@
     </div>
     <div class="row">
       <span class="label">呼び出しホットキー</span>
-      <input class="field mono" bind:value={hotkey} placeholder="Ctrl+Alt+KeyE" />
-      <p class="hint">修飾キー + KeyA〜KeyZ / Digit0〜9 の形式。空欄で無効化</p>
+      <div class="hk-row">
+        <button
+          class="field hk"
+          class:recording
+          onclick={startRecording}
+          onkeydown={onHotkeyKeydown}
+        >
+          {#if recording}
+            <span class="hk-prompt">キーを押してください…</span>
+          {:else if hotkey}
+            <span class="hk-keys">{formatAccel(hotkey)}</span>
+          {:else}
+            <span class="hk-prompt">未設定</span>
+          {/if}
+        </button>
+        <button class="btn" onclick={clearHotkey} disabled={!hotkey && !recording}>クリア</button>
+      </div>
+      <p class="hint">
+        {#if recording}
+          {#if rejected}
+            そのキーは使えません。Ctrl・Alt・Shift のいずれかと文字キーを組み合わせてください
+          {:else}
+            Esc で取り消し
+          {/if}
+        {:else}
+          枠をクリックしてから使いたいキーを押します。修飾キーとの組み合わせが必要です
+        {/if}
+      </p>
     </div>
     <div class="row">
       <span class="label">放置とみなす日数</span>
@@ -188,6 +251,26 @@
   .hint {
     margin: 4px 0 0;
     font-size: 11px;
+    color: var(--ink-3);
+  }
+  .hk-row {
+    display: flex;
+    gap: 8px;
+  }
+  .hk {
+    flex: 1;
+    text-align: left;
+    cursor: pointer;
+  }
+  .hk.recording {
+    border-color: var(--manila);
+    background: var(--manila-soft);
+  }
+  .hk-keys {
+    font-family: var(--mono);
+    font-weight: 600;
+  }
+  .hk-prompt {
     color: var(--ink-3);
   }
   textarea.field {
