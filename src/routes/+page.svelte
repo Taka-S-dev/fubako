@@ -385,7 +385,7 @@
 
   async function handleDeepArchiveOne(task: Task) {
     const ok = await ask(
-      `「${task.name}」をディープアーカイブへ移動します。\n移動後はアプリの表示・検索対象から外れます（フォルダを戻せば再登録されます）。`,
+      `「${task.name}」をディープアーカイブへ移動します。\n移動後はアプリの表示・検索対象から外れます（フォルダをこのウィンドウにドロップすれば、作業として戻せます）。`,
       { title: 'ディープアーカイブ', kind: 'warning', okLabel: '移動する', cancelLabel: 'キャンセル' }
     );
     if (!ok) return;
@@ -401,7 +401,7 @@
   async function handleDeepSweep(candidates: Task[]) {
     if (candidates.length === 0) return;
     const ok = await ask(
-      `${candidates.length} 件の完了タスクをディープアーカイブへ移動します。\n移動後はアプリの表示・検索対象から外れます（フォルダを戻せば再登録されます）。`,
+      `${candidates.length} 件の完了タスクをディープアーカイブへ移動します。\n移動後はアプリの表示・検索対象から外れます（フォルダをこのウィンドウにドロップすれば、作業として戻せます）。`,
       { title: 'アーカイブ整理', kind: 'warning', okLabel: '移動する', cancelLabel: 'キャンセル' }
     );
     if (!ok) return;

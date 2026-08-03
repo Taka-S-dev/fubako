@@ -459,7 +459,38 @@ pub async fn deep_archive_task(state: State<'_, AppState>, path: String) -> Resu
     Ok(dest.to_string_lossy().to_string())
 }
 
-/// 管理外のフォルダを作業ディレクトリへ移動して管理対象にする（エクスプローラーからのドロップ用）
+/// 取り込めるフォルダかを判定する。
+/// ディープアーカイブ配下だけは例外で、スキャン対象外＝アプリからは見えていないため、
+/// 取り込みが「退避したフォルダを作業へ戻す」手段になる
+fn import_guard(src: &Path, config: &AppConfig) -> Result<(), String> {
+    for r in [&config.work_root, &config.archive_root]
+        .iter()
+        .filter_map(|r| r.as_ref())
+    {
+        let Ok(r_c) = fs::canonicalize(r) else { continue };
+        if src.starts_with(&r_c) {
+            return Err("既に管理対象のフォルダです".to_string());
+        }
+    }
+    // ルート自身（やそれを含むフォルダ）はどれも取り込めない。丸ごと自分の中へ移すことになる
+    for r in [
+        &config.work_root,
+        &config.archive_root,
+        &config.deep_archive_root,
+    ]
+    .iter()
+    .filter_map(|r| r.as_ref())
+    {
+        let Ok(r_c) = fs::canonicalize(r) else { continue };
+        if r_c.starts_with(src) {
+            return Err("管理ルートを含むフォルダは取り込めません".to_string());
+        }
+    }
+    Ok(())
+}
+
+/// 管理外のフォルダを作業ディレクトリへ移動して管理対象にする（エクスプローラーからのドロップ用）。
+/// ディープアーカイブへ退避したフォルダを作業へ戻すのも、この経路で行う
 #[tauri::command]
 pub async fn import_task(state: State<'_, AppState>, path: String) -> Result<Task, String> {
     let config = state.config.lock().unwrap().clone();
@@ -471,22 +502,7 @@ pub async fn import_task(state: State<'_, AppState>, path: String) -> Result<Tas
         ));
     }
     let root = work_root(&config)?;
-    for r in [
-        &config.work_root,
-        &config.archive_root,
-        &config.deep_archive_root,
-    ]
-    .iter()
-    .filter_map(|r| r.as_ref())
-    {
-        let Ok(r_c) = fs::canonicalize(r) else { continue };
-        if src.starts_with(&r_c) {
-            return Err("既に管理対象のフォルダです".to_string());
-        }
-        if r_c.starts_with(&src) {
-            return Err("管理ルートを含むフォルダは取り込めません".to_string());
-        }
-    }
+    import_guard(&src, &config)?;
     let folder_name = src
         .file_name()
         .ok_or("フォルダ名を取得できません")?
@@ -495,6 +511,8 @@ pub async fn import_task(state: State<'_, AppState>, path: String) -> Result<Tas
 
     let mut meta = scan::read_meta(&src);
     meta.status = Status::Doing;
+    // 退避したものを戻す場合は完了日が残っている。作業中なのに完了日を持つ状態にしない
+    meta.completed_at = None;
     if meta.created_at.is_none() {
         meta.created_at = Some(Local::now().to_rfc3339());
     }
@@ -709,6 +727,52 @@ mod tests {
         assert!(ensure_managed(&sneaky, &config).is_err());
         // 存在しないパスも拒否
         assert!(ensure_managed(&work.join("なし"), &config).is_err());
+    }
+
+    #[test]
+    fn import_guard_rejects_folders_the_app_already_shows() {
+        let dir = tempfile::tempdir().unwrap();
+        let work = dir.path().join("work");
+        let archive = dir.path().join("archive");
+        fs::create_dir_all(work.join("20260802_task")).unwrap();
+        fs::create_dir_all(archive.join("2026").join("20260601_done")).unwrap();
+        fs::create_dir_all(dir.path().join("外").join("資料")).unwrap();
+        let config = AppConfig {
+            work_root: Some(work.to_string_lossy().into()),
+            archive_root: Some(archive.to_string_lossy().into()),
+            ..Default::default()
+        };
+        // import_task と同じく、判定前に実体へ解決したパスを渡す
+        let canon = |p: PathBuf| fs::canonicalize(p).unwrap();
+        // 一覧に並んでいるものを取り込み直す意味はない
+        assert!(import_guard(&canon(work.join("20260802_task")), &config).is_err());
+        assert!(import_guard(&canon(archive.join("2026").join("20260601_done")), &config).is_err());
+        // 管理ルートを内側に含むフォルダは、自分の中へ自分を移すことになる
+        assert!(import_guard(&canon(dir.path().to_path_buf()), &config).is_err());
+        // 管理外のフォルダは通る
+        assert!(import_guard(&canon(dir.path().join("外").join("資料")), &config).is_ok());
+    }
+
+    #[test]
+    fn import_guard_allows_taking_back_from_deep_archive() {
+        let dir = tempfile::tempdir().unwrap();
+        let work = dir.path().join("work");
+        let archive = dir.path().join("archive");
+        let deep = dir.path().join("deep");
+        fs::create_dir_all(&work).unwrap();
+        fs::create_dir_all(&archive).unwrap();
+        fs::create_dir_all(deep.join("2026").join("20260101_古い調査")).unwrap();
+        let config = AppConfig {
+            work_root: Some(work.to_string_lossy().into()),
+            archive_root: Some(archive.to_string_lossy().into()),
+            deep_archive_root: Some(deep.to_string_lossy().into()),
+            ..Default::default()
+        };
+        let canon = |p: PathBuf| fs::canonicalize(p).unwrap();
+        // スキャン対象外＝アプリから見えないので、取り込みが唯一の戻す手段になる
+        assert!(import_guard(&canon(deep.join("2026").join("20260101_古い調査")), &config).is_ok());
+        // ただしディープアーカイブのルート自身は戻せない
+        assert!(import_guard(&canon(deep.clone()), &config).is_err());
     }
 
     #[test]
