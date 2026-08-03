@@ -50,18 +50,18 @@ export function isOverdue(due: string | null): boolean {
 
 /**
  * 工数表現を分に正規化する（Jira/GitLab型の単位つき自由入力）。
- * 受理: "90" (=分) / "1.5h" / "90m" / "1h30m" / "45分" / "2時間" / "1時間30分"
+ * 受理: "90" (=分) / "1.5h" / "90m" / "1h30m" / "1h30" / "45分" / "2時間" / "1時間30分"
+ *
+ * 分の単位は省略できる。読み取れない入力は数字だけを拾わずに null を返す
+ * （"1h30" を 1 分と解釈するような、黙って桁の違う値になる読み方をしない）
  */
 export function parseDuration(input: string): number | null {
   const s = input.trim().toLowerCase().replaceAll('時間', 'h').replaceAll('分', 'm');
   if (!s) return null;
-  const m = s.match(/^(?:(\d+(?:\.\d+)?)\s*h)?\s*(?:(\d+(?:\.\d+)?)\s*m)?$/);
-  if (m && (m[1] || m[2])) {
-    const min = Math.round(parseFloat(m[1] ?? '0') * 60 + parseFloat(m[2] ?? '0'));
-    return min > 0 ? min : null;
-  }
-  const bare = parseFloat(s);
-  return !isNaN(bare) && bare > 0 ? Math.round(bare) : null;
+  const m = s.match(/^(?:(\d+(?:\.\d+)?)\s*h)?\s*(?:(\d+(?:\.\d+)?)\s*m?)?$/);
+  if (!m || !(m[1] || m[2])) return null;
+  const min = Math.round(parseFloat(m[1] ?? '0') * 60 + parseFloat(m[2] ?? '0'));
+  return min > 0 ? min : null;
 }
 
 /** 分を正規形 "45m" / "1h" / "1h30m" に（入力欄のエコー用・可逆） */
