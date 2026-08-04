@@ -70,6 +70,7 @@
       progressMode = task.progress_mode;
       newItemText = '';
       renaming = false;
+      editingItem = -1;
     }
   });
 
@@ -202,6 +203,37 @@
     }
     progressMode = mode;
     save();
+  }
+
+  // やることの文言も後から直せる。作業名の編集と同じ作法
+  // （クリックで入力欄・Enter か外れたら確定・Esc で取り消し）
+  let editingItem = $state(-1);
+  let editingText = $state('');
+  let editingInput: HTMLInputElement | undefined = $state();
+
+  function startEditItem(index: number) {
+    editingItem = index;
+    editingText = checklist[index].text;
+    queueMicrotask(() => editingInput?.select());
+  }
+
+  // Enter で確定すると入力欄が外れて blur も発火するため、二重実行を防ぐ
+  function commitEditItem() {
+    if (editingItem < 0) return;
+    const index = editingItem;
+    editingItem = -1;
+    const next = editingText.trim();
+    // 空にするのは削除ではなく打ち間違いとみなし、元の文言を残す
+    if (next && next !== checklist[index].text) {
+      checklist[index].text = next;
+      save();
+    }
+  }
+
+  function onEditItemKeydown(e: KeyboardEvent) {
+    e.stopPropagation();
+    if (e.key === 'Enter') commitEditItem();
+    if (e.key === 'Escape') editingItem = -1;
   }
 
   // やることの操作は待たせず即保存する
@@ -462,7 +494,20 @@
               onchange={() => toggleItem(i)}
               aria-label={item.text}
             />
-            <span class="item-text">{item.text}</span>
+            {#if editingItem === i}
+              <input
+                class="item-edit"
+                bind:this={editingInput}
+                bind:value={editingText}
+                onkeydown={onEditItemKeydown}
+                onblur={commitEditItem}
+                aria-label="やることの文言"
+              />
+            {:else}
+              <button class="item-text" onclick={() => startEditItem(i)} title="クリックで編集">
+                {item.text}
+              </button>
+            {/if}
             <span class="est-wrap">
               <input
                 class="est mono"
@@ -911,9 +956,36 @@
     color: var(--ink-3);
     text-decoration: line-through;
   }
+  /* 見た目は本文のまま。編集できることはホバーの下線で示す */
   .item-text {
     flex: 1;
+    padding: 0;
+    border: 0;
+    background: none;
+    font: inherit;
+    color: inherit;
+    text-align: left;
     word-break: break-all;
+    cursor: text;
+  }
+  .item-text:hover {
+    text-decoration: underline;
+  }
+  .items li.done .item-text:hover {
+    text-decoration: line-through underline;
+  }
+  .item-edit {
+    flex: 1;
+    min-width: 0;
+    padding: 1px 4px;
+    border: 1px solid var(--focus);
+    border-radius: 4px;
+    background: var(--surface);
+    font: inherit;
+    color: inherit;
+  }
+  .item-edit:focus {
+    outline: none;
   }
   .est-wrap {
     display: inline-flex;
