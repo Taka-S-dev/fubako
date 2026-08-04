@@ -559,10 +559,13 @@
     {:else}
       <ul>
         {#each listing.entries as entry (entry.rel)}
-          {@const cut = entry.rel.lastIndexOf('\\')}
+          {@const depth = entry.rel.split('\\').length - 1}
           <li>
+            <!-- 一覧はフォルダの直後にその中身が並ぶ。字下げなら幅が足りず
+                 パスが削られても「中にある」ことだけは消えずに残る -->
             <button
               class="frow"
+              style="--depth: {depth}"
               onclick={() => onopenentry(task, entry)}
               oncontextmenu={(e) => onentrycontext(e, task, entry)}
               title={entry.is_dir ? `${entry.rel} をエクスプローラーで開く` : `${entry.rel} を開く`}
@@ -572,12 +575,9 @@
               {:else}
                 <span class="ficon">{entry.is_dir ? '▸' : '·'}</span>
               {/if}
-              <span class="fname">
-                <!-- 幅が足りないときは親フォルダ側から削り、名前そのものは残す -->
-                {#if cut >= 0}<span class="fparent">{entry.rel.slice(0, cut + 1)}</span>{/if}<span
-                  class="fleaf">{entry.rel.slice(cut + 1)}</span
-                >
-              </span>
+              <!-- 親フォルダは字下げと1つ上の行が示すので、名前だけを出す。
+                   完全なパスは title で読める -->
+              <span class="fname">{entry.rel.slice(entry.rel.lastIndexOf('\\') + 1)}</span>
               <span class="fmeta mono">
                 {entry.is_dir ? '' : fmtSize(entry.size)}
               </span>
@@ -1078,7 +1078,8 @@
     align-items: center;
     gap: 7px;
     width: 100%;
-    padding: 4px 2px;
+    /* --depth はサブフォルダの深さ。字下げで階層を示す */
+    padding: 4px 2px 4px calc(2px + var(--depth, 0) * 12px);
     border: 0;
     border-radius: 4px;
     background: none;
@@ -1111,17 +1112,9 @@
   }
   .fname {
     flex: 1;
-    display: flex;
     min-width: 0;
     white-space: nowrap;
-  }
-  .fparent {
-    color: var(--ink-3);
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .fleaf {
-    flex: none;
+    /* 名前が長いとき、はみ出した文字がサイズ・日付の上に描かれるのを防ぐ */
     overflow: hidden;
     text-overflow: ellipsis;
   }
