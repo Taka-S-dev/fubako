@@ -131,6 +131,9 @@
               <span class="st st-{t.status}">
                 <span class="st-dot"></span>{statusLabel[t.status]}
               </span>
+              {#if t.on_hold_since}<span class="hold-mini" title="保留中。放置の判定はされません"
+                  >保留</span
+                >{/if}
               {#if t.stale}<span class="stale-mini" title="放置">!</span>{/if}
             </td>
             <td class="mono dim">{fmtPrefix(t.date_prefix) ?? '—'}</td>
@@ -305,6 +308,16 @@
     margin-left: 5px;
     color: var(--red);
     font-weight: 700;
+  }
+  /* 放置と同じ位置に添えるが、意図して止めている状態なので警告色にしない */
+  .hold-mini {
+    display: inline-block;
+    margin-left: 5px;
+    padding: 0 5px;
+    border-radius: 99px;
+    background: var(--slate-soft);
+    color: var(--slate);
+    font-size: 10px;
   }
   .mini-bar-wrap {
     display: inline-flex;
