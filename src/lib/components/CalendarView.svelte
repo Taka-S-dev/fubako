@@ -4,7 +4,7 @@
   let {
     tasks,
     selectedPath,
-    state,
+    state: view,
     onselect,
   }: {
     tasks: Task[];
@@ -25,25 +25,25 @@
   const todayKey = keyOf(today);
 
   function move(delta: number) {
-    const d = new Date(state.year, state.month + delta, 1);
-    state.year = d.getFullYear();
-    state.month = d.getMonth();
+    const d = new Date(view.year, view.month + delta, 1);
+    view.year = d.getFullYear();
+    view.month = d.getMonth();
   }
   function goToday() {
-    state.year = today.getFullYear();
-    state.month = today.getMonth();
+    view.year = today.getFullYear();
+    view.month = today.getMonth();
   }
 
   // 日曜始まり6週間(42マス)
   const cells = $derived.by(() => {
-    const first = new Date(state.year, state.month, 1);
-    const start = new Date(state.year, state.month, 1 - first.getDay());
+    const first = new Date(view.year, view.month, 1);
+    const start = new Date(view.year, view.month, 1 - first.getDay());
     return Array.from({ length: 42 }, (_, i) => {
       const d = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i);
       return {
         key: keyOf(d),
         day: d.getDate(),
-        inMonth: d.getMonth() === state.month,
+        inMonth: d.getMonth() === view.month,
         dow: d.getDay(),
       };
     });
@@ -59,15 +59,15 @@
       map.get(key)!.push({ task, kind });
     };
     for (const t of tasks) {
-      if (state.showStart && t.date_prefix && t.date_prefix.length === 8) {
+      if (view.showStart && t.date_prefix && t.date_prefix.length === 8) {
         add(
           `${t.date_prefix.slice(0, 4)}-${t.date_prefix.slice(4, 6)}-${t.date_prefix.slice(6, 8)}`,
           t,
           'start'
         );
       }
-      if (state.showDue && t.due && !t.archived) add(t.due, t, 'due');
-      if (state.showDone && t.completed_at) add(t.completed_at.slice(0, 10), t, 'done');
+      if (view.showDue && t.due && !t.archived) add(t.due, t, 'due');
+      if (view.showDone && t.completed_at) add(t.completed_at.slice(0, 10), t, 'done');
     }
     // 期限 > 完了 > 開始 の順に表示
     const order = { due: 0, done: 1, start: 2 };
@@ -80,26 +80,44 @@
   const MAX_CHIPS = 3;
 
   const kindLabel = { start: '開始', due: '期限', done: '完了' };
+
+  // 入り切らない日は、そのマスだけを他のマスの上へ広げて全件出す。
+  // マス自体を高くすると週の高さが揃わなくなるため、重ねて表示する
+  let expandedDay = $state<string | null>(null);
+
+  // 広げているマスの外を触ったときだけ畳む。要素ごとに伝播を止める作りだと
+  // 余白や日付の数字など、止め忘れた場所を押したときに畳まれてしまう
+  function closeIfOutside(e: PointerEvent) {
+    if (!expandedDay) return;
+    if (e.target instanceof Element && e.target.closest('.cell.expanded')) return;
+    expandedDay = null;
+  }
 </script>
+
+<svelte:window
+  onpointerdown={closeIfOutside}
+  onwheel={() => (expandedDay = null)}
+  onresize={() => (expandedDay = null)}
+/>
 
 <div class="cal">
   <div class="cal-head">
     <div class="nav">
       <button class="btn nav-btn" onclick={() => move(-1)} aria-label="前の月">‹</button>
-      <span class="ym">{state.year}年{state.month + 1}月</span>
+      <span class="ym">{view.year}年{view.month + 1}月</span>
       <button class="btn nav-btn" onclick={() => move(1)} aria-label="次の月">›</button>
       <button class="btn today-btn" onclick={goToday}>今日</button>
     </div>
     <div class="legend">
-      <label><input type="checkbox" bind:checked={state.showDue} /><span class="dot due"></span
+      <label><input type="checkbox" bind:checked={view.showDue} /><span class="dot due"></span
         >期限</label
       >
       <label
-        ><input type="checkbox" bind:checked={state.showDone} /><span class="dot done"></span
+        ><input type="checkbox" bind:checked={view.showDone} /><span class="dot done"></span
         >完了</label
       >
       <label
-        ><input type="checkbox" bind:checked={state.showStart} /><span class="dot start"></span
+        ><input type="checkbox" bind:checked={view.showStart} /><span class="dot start"></span
         >開始</label
       >
     </div>
@@ -114,29 +132,47 @@
   <div class="grid">
     {#each cells as cell (cell.key)}
       {@const entries = entriesByDay.get(cell.key) ?? []}
+      {@const open = expandedDay === cell.key}
       <div
         class="cell"
         class:out={!cell.inMonth}
         class:today={cell.key === todayKey}
+        class:expanded={open}
       >
-        <span class="daynum" class:sun={cell.dow === 0} class:sat={cell.dow === 6}>
-          {cell.day}
-        </span>
-        {#each entries.slice(0, MAX_CHIPS) as e (e.task.path + e.kind)}
-          <button
-            class="chip {e.kind}"
-            class:selected={e.task.path === selectedPath}
-            class:overdue={e.kind === 'due' && cell.key < todayKey}
-            title="{kindLabel[e.kind]}: {e.task.name}"
-            onclick={() => onselect(e.task)}
-          >
-            <span class="chip-dot"></span>
-            <span class="chip-name">{e.task.name}</span>
-          </button>
-        {/each}
-        {#if entries.length > MAX_CHIPS}
-          <span class="more">+{entries.length - MAX_CHIPS}</span>
-        {/if}
+        <!-- 広げたときだけ、この箱が他のマスの上へせり出す -->
+        <div class="stack">
+          <span class="daynum" class:sun={cell.dow === 0} class:sat={cell.dow === 6}>
+            {cell.day}
+          </span>
+          {#each open ? entries : entries.slice(0, MAX_CHIPS) as e (e.task.path + e.kind)}
+            <button
+              class="chip {e.kind}"
+              class:selected={e.task.path === selectedPath}
+              class:overdue={e.kind === 'due' && cell.key < todayKey}
+              title="{kindLabel[e.kind]}: {e.task.name}"
+              onclick={() => onselect(e.task)}
+            >
+              <span class="chip-dot"></span>
+              <span class="chip-name">{e.task.name}</span>
+            </button>
+          {/each}
+          {#if entries.length > MAX_CHIPS}
+            <button
+              class="more"
+              onclick={() => (expandedDay = open ? null : cell.key)}
+              onkeydown={(e) => {
+                // 広げた直後はこのボタンに焦点があるので、Esc をここで受けて
+                // 画面全体の Esc（絞り込み解除やトレイ格納）まで伝えない
+                if (open && e.key === 'Escape') {
+                  e.stopPropagation();
+                  expandedDay = null;
+                }
+              }}
+            >
+              {open ? '閉じる' : `他 ${entries.length - MAX_CHIPS} 件`}
+            </button>
+          {/if}
+        </div>
       </div>
     {/each}
   </div>
@@ -238,12 +274,31 @@
     background: var(--surface);
     border: 1px solid var(--line);
     border-radius: 8px;
-    padding: 5px 6px;
     min-height: 84px;
+    overflow: hidden;
+  }
+  .stack {
+    height: 100%;
+    padding: 5px 6px;
     display: flex;
     flex-direction: column;
     gap: 3px;
-    overflow: hidden;
+  }
+  /* 広げている間は、中身がマスの外へ出られるようにする。
+     マス自体を高くすると週の高さが崩れるため、中身だけを重ねて伸ばす */
+  .cell.expanded {
+    overflow: visible;
+    position: relative;
+    z-index: 3;
+  }
+  .cell.expanded .stack {
+    position: absolute;
+    inset: -1px -1px auto;
+    height: auto;
+    background: var(--surface);
+    border: 1px solid var(--line-strong);
+    border-radius: 8px;
+    box-shadow: var(--shadow-lift);
   }
   .cell.out {
     background: transparent;
@@ -329,7 +384,16 @@
   .more {
     font-size: 10px;
     color: var(--ink-3);
-    padding-left: 2px;
+    padding: 1px 2px;
+    border: 0;
+    border-radius: 4px;
+    background: none;
+    text-align: left;
+    cursor: pointer;
+  }
+  .more:hover {
+    color: var(--ink-2);
+    background: var(--surface-2);
   }
 </style>
 
