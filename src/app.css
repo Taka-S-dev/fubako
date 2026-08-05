@@ -66,6 +66,12 @@ select {
   color: inherit;
 }
 
+/* ブラウザ既定のプレースホルダは濃く、入力済みの文字と紛らわしい。
+   補足表示に使っている薄いグレーへ揃える */
+::placeholder {
+  color: var(--ink-3);
+}
+
 :focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 1px;

@@ -467,8 +467,8 @@
       <input class="field" type="date" bind:value={due} />
     </div>
     <div class="row memo-row">
-      <span class="label">メモ</span>
-      <textarea class="field" rows="4" bind:value={memo} placeholder="フォルダ名に入れたくない補足を書く場所"
+      <span class="label">補足</span>
+      <textarea class="field" rows="4" bind:value={memo} placeholder="作業名に書ききれない補足"
       ></textarea>
     </div>
     {#if dirty}
@@ -1001,9 +1001,6 @@
     font-size: 11px;
     color: var(--ink-2);
     text-align: right;
-  }
-  .est::placeholder {
-    color: var(--ink-3);
   }
   .steppers {
     display: flex;

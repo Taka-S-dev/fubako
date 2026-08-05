@@ -113,7 +113,7 @@
       class:filtering={!!query}
       bind:this={searchEl}
       bind:value={query}
-      placeholder="検索: 名前・タグ・メモ・日付　　#タグ名 でタグだけに限定   (Ctrl+F)"
+      placeholder="検索: 名前・タグ・補足・日付　　#タグ名 でタグだけに限定   (Ctrl+F)"
       disabled={!configured}
       oninput={() => {
         dismissed = false;
