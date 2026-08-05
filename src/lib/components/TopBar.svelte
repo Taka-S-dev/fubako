@@ -110,6 +110,7 @@
   <div class="search-wrap">
     <input
       class="search"
+      data-search
       class:filtering={!!query}
       bind:this={searchEl}
       bind:value={query}

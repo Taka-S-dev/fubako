@@ -7,6 +7,7 @@
     selectedPath,
     state,
     onselect,
+    onopen,
     oncontext,
   }: {
     tasks: Task[];
@@ -14,6 +15,7 @@
     /** 表示条件は親が持つ。ビューを切り替えても選び直さずに済む */
     state: ListViewState;
     onselect: (t: Task) => void;
+    onopen: (t: Task) => void;
     oncontext: (e: MouseEvent, t: Task) => void;
   } = $props();
 
@@ -116,8 +118,10 @@
       <tbody>
         {#each rows as t (t.path)}
           <tr
+            data-task={t.path}
             class:selected={t.path === selectedPath}
             onclick={() => onselect(t)}
+            ondblclick={() => onopen(t)}
             oncontextmenu={(e) => oncontext(e, t)}
           >
             <td>

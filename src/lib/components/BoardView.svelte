@@ -9,6 +9,7 @@
     dragging,
     filtering,
     onselect,
+    onopen,
     onpointerdown,
     oncontext,
   }: {
@@ -20,6 +21,7 @@
     /** 絞り込み中は空の列の案内文を変える */
     filtering: boolean;
     onselect: (t: Task) => void;
+    onopen: (t: Task) => void;
     onpointerdown: (e: PointerEvent, t: Task) => void;
     oncontext: (e: MouseEvent, t: Task) => void;
   } = $props();
@@ -66,6 +68,7 @@
             {task}
             selected={task.path === selectedPath}
             {onselect}
+            {onopen}
             {onpointerdown}
             {oncontext}
           />

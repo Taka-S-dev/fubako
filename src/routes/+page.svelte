@@ -187,9 +187,17 @@
     ]);
   }
 
+  // 選ぶだけ。同じカードで選択を外すと詳細パネルが開閉して幅が変わり、
+  // ボードがガタつく。閉じるのは右上の × と Esc に任せる
   function selectCard(t: Task) {
     if (drag.suppressClick) return;
-    selectedPath = selectedPath === t.path ? null : t.path;
+    selectedPath = t.path;
+  }
+
+  // エクスプローラーと同じ作法。押したカードを選んだうえで開く
+  function openCard(t: Task) {
+    selectedPath = t.path;
+    handleOpen(t);
   }
 
   async function dropOn(task: Task, status: Status) {
@@ -360,6 +368,62 @@
     }
   }
 
+  // 呼び出し → 絞り込み → 選択 → 開く、をキーボードだけで通せるようにする。
+  // 並び順はビューごとに違うため、描画された順序をそのまま辿る
+
+  /** 描画中のカードを列ごとにまとめる。列を持たないビューは1列として扱う */
+  function cardColumns(): HTMLElement[][] {
+    const groups = new Map<string, HTMLElement[]>();
+    for (const el of document.querySelectorAll<HTMLElement>('[data-task]')) {
+      const key = el.closest<HTMLElement>('[data-status]')?.dataset.status ?? '';
+      const group = groups.get(key);
+      if (group) group.push(el);
+      else groups.set(key, [el]);
+    }
+    // Map は挿入順を保つので、値の並びはそのまま描画順になる
+    return [...groups.values()];
+  }
+
+  function selectCardElement(el: HTMLElement | undefined) {
+    if (!el) return;
+    selectedPath = el.dataset.task ?? null;
+    el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }
+
+  function moveSelection(dx: number, dy: number) {
+    const columns = cardColumns();
+    if (!columns.length) return;
+
+    let col = -1;
+    let row = -1;
+    columns.forEach((cards, i) => {
+      const at = cards.findIndex((el) => el.dataset.task === selectedPath);
+      if (at >= 0) {
+        col = i;
+        row = at;
+      }
+    });
+
+    // 未選択のときは、進む向きに応じて端から入る
+    if (col < 0) {
+      const cards = columns[0];
+      selectCardElement(dy < 0 ? cards[cards.length - 1] : cards[0]);
+      return;
+    }
+
+    if (dx !== 0) {
+      // 空の列はカードを持たないためそもそも並びに現れない。
+      // 列を移るときは縦位置をできるだけ保つ
+      const target = columns[col + dx];
+      if (!target) return;
+      selectCardElement(target[Math.min(row, target.length - 1)]);
+      return;
+    }
+
+    const cards = columns[col];
+    selectCardElement(cards[Math.max(0, Math.min(cards.length - 1, row + dy))]);
+  }
+
   function onKeydown(e: KeyboardEvent) {
     if (e.key === 'Escape') {
       if (showCreate) showCreate = false;
@@ -374,6 +438,26 @@
     }
     const inField =
       e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement;
+    // 検索欄からは続けて一覧へ入れる。候補が出ている間は TopBar 側が先に処理する
+    const inSearch = e.target instanceof HTMLElement && e.target.dataset.search !== undefined;
+    if (!e.isComposing && (!inField || inSearch)) {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        moveSelection(0, e.key === 'ArrowDown' ? 1 : -1);
+        return;
+      }
+      if (e.key === 'Enter' && selected) {
+        e.preventDefault();
+        handleOpen(selected);
+        return;
+      }
+    }
+    // 左右は検索欄では文字カーソルの移動なので、入力欄の外でだけ列移動に使う
+    if (!inField && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+      e.preventDefault();
+      moveSelection(e.key === 'ArrowRight' ? 1 : -1, 0);
+      return;
+    }
     if (e.ctrlKey && e.key.toLowerCase() === 'n') {
       e.preventDefault();
       showCreate = true;
@@ -508,6 +592,7 @@
           {selectedPath}
           state={listState}
           onselect={selectCard}
+          onopen={openCard}
           oncontext={taskMenu}
         />
       {:else if view === 'cal'}
@@ -528,6 +613,7 @@
           dragging={drag.dragging}
           filtering={!!query}
           onselect={selectCard}
+          onopen={openCard}
           onpointerdown={drag.start}
           oncontext={taskMenu}
         />

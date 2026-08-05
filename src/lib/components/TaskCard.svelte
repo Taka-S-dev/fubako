@@ -6,12 +6,14 @@
     task,
     selected = false,
     onselect,
+    onopen,
     onpointerdown,
     oncontext,
   }: {
     task: Task;
     selected?: boolean;
     onselect: (t: Task) => void;
+    onopen: (t: Task) => void;
     onpointerdown: (e: PointerEvent, t: Task) => void;
     oncontext: (e: MouseEvent, t: Task) => void;
   } = $props();
@@ -24,11 +26,13 @@
 
 <button
   class="card status-{task.status}"
+  data-task={task.path}
   class:selected
   onpointerdown={(e) => onpointerdown(e, task)}
   onclick={() => onselect(task)}
+  ondblclick={() => onopen(task)}
   oncontextmenu={(e) => oncontext(e, task)}
-  title={task.folder_name}
+  title="{task.folder_name}&#10;ダブルクリックでエクスプローラーを開く"
 >
   <div class="top">
     {#if dateLabel}<span class="date mono">{dateLabel}</span>{/if}
