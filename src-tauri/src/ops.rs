@@ -21,6 +21,8 @@ pub struct MetaPatch {
     pub checklist: Vec<ChecklistItem>,
     pub manual_progress: Option<u32>,
     pub progress_mode: ProgressMode,
+    /// 保留にするかどうか。開始時刻は受け取らず、切り替えた側で打つ
+    pub on_hold: bool,
 }
 
 /// 別ボリューム間の移動を示す OS エラーコード
@@ -322,6 +324,12 @@ pub async fn set_task_meta(
         .collect();
     meta.progress = patch.manual_progress.map(|p| p.min(100));
     meta.progress_mode = patch.progress_mode;
+    // 保留の開始時刻はここで打つ。既に保留なら打ち直さず、いつからかを保つ
+    meta.on_hold_since = match (patch.on_hold, meta.on_hold_since.take()) {
+        (true, Some(since)) => Some(since),
+        (true, None) => Some(Local::now().to_rfc3339()),
+        (false, _) => None,
+    };
     if meta.created_at.is_none() {
         meta.created_at = Some(Local::now().to_rfc3339());
     }

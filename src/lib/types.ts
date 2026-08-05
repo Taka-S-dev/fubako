@@ -43,10 +43,27 @@ export interface Task {
   remaining_min: number | null;
   created_at: string | null;
   completed_at: string | null;
+  /** 保留を始めた日時。null なら保留していない */
+  on_hold_since: string | null;
   last_activity: string | null;
   file_count: number;
   file_names: string[];
   stale: boolean;
+}
+
+/**
+ * 詳細パネルから保存できる項目。まとめて1つの型にしてあるので、
+ * 項目が増えても呼び出し側の引数の並びが崩れない
+ */
+export interface MetaPatch {
+  status: Status;
+  tags: string[];
+  due: string | null;
+  memo: string;
+  checklist: ChecklistItem[];
+  manualProgress: number | null;
+  progressMode: ProgressMode;
+  onHold: boolean;
 }
 
 export type ViewName = 'board' | 'list' | 'cal' | 'dash';

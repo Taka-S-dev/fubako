@@ -52,6 +52,11 @@ pub struct TaskMeta {
     pub created_at: Option<String>,
     #[serde(default)]
     pub completed_at: Option<String>,
+    /// 保留を始めた日時。None なら保留していない。
+    /// 真偽値ではなく時刻にしておくと、保留がいつからかを表示でき、
+    /// completed_at と同じ「状態は時刻で持つ」形に揃う
+    #[serde(default)]
+    pub on_hold_since: Option<String>,
 }
 
 /// フロントエンドへ返すタスク一件分
@@ -77,6 +82,7 @@ pub struct Task {
     pub remaining_min: Option<u32>,
     pub created_at: Option<String>,
     pub completed_at: Option<String>,
+    pub on_hold_since: Option<String>,
     pub last_activity: Option<String>,
     /// フォルダ直下の項目数
     pub file_count: usize,

@@ -3,11 +3,19 @@
     ChecklistItem,
     FolderEntry,
     FolderListing,
+    MetaPatch,
     ProgressMode,
     Status,
     Task,
   } from '$lib/types';
-  import { fmtDateTime, fmtDurationCompact, fmtMinutes, fmtSize, parseDuration } from '$lib/format';
+  import {
+    fmtDateTime,
+    fmtDurationCompact,
+    fmtMinutes,
+    fmtSize,
+    parseDuration,
+    relativeDays,
+  } from '$lib/format';
 
   let {
     task,
@@ -33,16 +41,7 @@
     oncomplete: (t: Task) => void;
     onreopen: (t: Task) => void;
     onrename: (t: Task, name: string) => void;
-    onsave: (
-      t: Task,
-      status: Status,
-      tags: string[],
-      due: string | null,
-      memo: string,
-      checklist: ChecklistItem[],
-      manualProgress: number | null,
-      progressMode: ProgressMode
-    ) => void;
+    onsave: (t: Task, patch: MetaPatch) => void;
     onopenentry: (t: Task, entry: FolderEntry) => void;
     onentrycontext: (e: MouseEvent, t: Task, entry: FolderEntry) => void;
   } = $props();
@@ -55,6 +54,7 @@
   let checklist = $state<ChecklistItem[]>([]);
   let manualProgress = $state<number | null>(null);
   let progressMode = $state<ProgressMode>('auto');
+  let onHold = $state(false);
   let newItemText = $state('');
 
   $effect(() => {
@@ -68,6 +68,7 @@
       checklist = task.checklist.map((i) => ({ ...i }));
       manualProgress = task.manual_progress;
       progressMode = task.progress_mode;
+      onHold = task.on_hold_since !== null;
       newItemText = '';
       renaming = false;
       editingItem = -1;
@@ -192,7 +193,16 @@
   });
 
   function save() {
-    onsave(task, status, tags, due || null, memo, checklist, manualProgress, progressMode);
+    onsave(task, {
+      status,
+      tags,
+      due: due || null,
+      memo,
+      checklist,
+      manualProgress,
+      progressMode,
+      onHold,
+    });
   }
 
   function setMode(mode: ProgressMode) {
@@ -206,7 +216,6 @@
   }
 
   // やることの文言も後から直せる。作業名の編集と同じ作法
-  // （クリックで入力欄・Enter か外れたら確定・Esc で取り消し）
   let editingItem = $state(-1);
   let editingText = $state('');
   let editingInput: HTMLInputElement | undefined = $state();
@@ -331,17 +340,33 @@
     {#if !task.archived}
       <div class="row">
         <span class="label">状態</span>
-        <div class="seg" role="radiogroup" aria-label="状態">
-          <button
-            class="seg-btn"
-            class:active={status === 'backlog'}
-            onclick={() => (status = 'backlog')}>未着手</button
-          >
-          <button
-            class="seg-btn"
-            class:active={status === 'doing'}
-            onclick={() => (status = 'doing')}>進行中</button
-          >
+        <!-- 状態と保留は別軸なので、同じ列に並べて1行に収める -->
+        <div class="status-body">
+          <div class="seg" role="radiogroup" aria-label="状態">
+            <button
+              class="seg-btn"
+              class:active={status === 'backlog'}
+              onclick={() => (status = 'backlog')}>未着手</button
+            >
+            <button
+              class="seg-btn"
+              class:active={status === 'doing'}
+              onclick={() => (status = 'doing')}>進行中</button
+            >
+          </div>
+          <label class="hold" title="保留中は放置として印を付けません">
+            <input
+              type="checkbox"
+              checked={onHold}
+              onchange={(e) => {
+                onHold = e.currentTarget.checked;
+                save();
+              }}
+            />
+            保留{#if task.on_hold_since}<span class="hold-since"
+                >{relativeDays(task.on_hold_since)}から</span
+              >{/if}
+          </label>
         </div>
       </div>
     {:else}
@@ -986,6 +1011,25 @@
   }
   .item-edit:focus {
     outline: none;
+  }
+  .status-body {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px 10px;
+  }
+  .hold {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 12px;
+    color: var(--ink-2);
+    cursor: pointer;
+  }
+  .hold-since {
+    margin-left: 4px;
+    font-size: 11px;
+    color: var(--ink-3);
   }
   .est-wrap {
     display: inline-flex;

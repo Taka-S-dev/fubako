@@ -30,6 +30,7 @@
 <button
   class="card status-{task.status}"
   data-task={task.path}
+  class:on-hold={task.on_hold_since}
   class:selected
   onpointerdown={(e) => onpointerdown(e, task)}
   onclick={() => onselect(task)}
@@ -40,6 +41,13 @@
   <div class="top">
     {#if dateLabel}<span class="date mono">{dateLabel}</span>{/if}
     <span class="spacer"></span>
+    {#if task.on_hold_since}
+      <!-- 日数は「長く止まっている」に気づくためのもの。当日は数字を出さない -->
+      {@const held = daysSince(task.on_hold_since) ?? 0}
+      <span class="badge hold" title="保留中。放置の判定はされません">
+        保留{held > 0 ? ` ${held}日` : ''}
+      </span>
+    {/if}
     {#if task.stale}
       <span class="badge stale">放置 {daysSince(task.last_activity)}日</span>
     {/if}
@@ -115,6 +123,22 @@
   .card.status-done::before {
     background: var(--green-soft);
   }
+  /* 保留は「今は見なくていい」状態なので、白を落として背景側へ沈める。
+     状態を表すタブの色には触れない */
+  .card.on-hold {
+    /* 白（--surface）と面の灰（--surface-2）の中間。影を消してあるぶん、
+       塗りは弱くても十分沈む */
+    background: #f8f9fb;
+    box-shadow: none;
+  }
+  /* 沈めたぶん進捗のオレンジだけが浮くため、こちらも色を落とす。
+     帯の長さは残るので、進み具合は読める */
+  .card.on-hold .fill {
+    background: var(--slate);
+  }
+  .card.on-hold .p-label {
+    color: var(--ink-3);
+  }
   .card:hover {
     box-shadow: var(--shadow-lift);
     transform: translateY(-1px);
@@ -154,6 +178,11 @@
   .badge.stale {
     background: var(--red-soft);
     color: var(--red);
+  }
+  /* 放置とは違い、こちらは意図して止めている状態なので警告色にしない */
+  .badge.hold {
+    background: var(--slate-soft);
+    color: var(--slate);
   }
   .badge.due {
     background: var(--slate-soft);
@@ -235,8 +264,19 @@
     border-radius: 4px;
   }
 
+  /* 手が動いていない作業は名前も弱める。名前が一番太く大きいので、
+     ここを落とさないとカードだけ沈めても視線を引き続ける */
   .card.status-done .name {
     color: var(--ink-2);
     font-weight: 500;
+  }
+  /* 保留は完了より弱くてよい。完了は結果として残るが、保留は
+     見なくていい状態そのものなので、名前も日付も一段落とす */
+  .card.on-hold .name {
+    color: var(--ink-3);
+    font-weight: 500;
+  }
+  .card.on-hold .date {
+    color: var(--ink-3);
   }
 </style>

@@ -1,12 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
-import type {
-  AppConfig,
-  ChecklistItem,
-  FolderListing,
-  ProgressMode,
-  Status,
-  Task,
-} from './types';
+import type { AppConfig, FolderListing, MetaPatch, Task } from './types';
 
 export const api = {
   getConfig: () => invoke<AppConfig>('get_config'),
@@ -16,26 +9,18 @@ export const api = {
   listTasks: () => invoke<Task[]>('list_tasks'),
   createTask: (name: string, useTemplate: boolean) =>
     invoke<Task>('create_task', { name, useTemplate }),
-  setTaskMeta: (
-    path: string,
-    status: Status,
-    tags: string[],
-    due: string | null,
-    memo: string,
-    checklist: ChecklistItem[],
-    manualProgress: number | null,
-    progressMode: ProgressMode
-  ) =>
+  setTaskMeta: (path: string, patch: MetaPatch) =>
     invoke<void>('set_task_meta', {
       path,
       patch: {
-        status,
-        tags,
-        due,
-        memo,
-        checklist,
-        manual_progress: manualProgress,
-        progress_mode: progressMode,
+        status: patch.status,
+        tags: patch.tags,
+        due: patch.due,
+        memo: patch.memo,
+        checklist: patch.checklist,
+        manual_progress: patch.manualProgress,
+        progress_mode: patch.progressMode,
+        on_hold: patch.onHold,
       },
     }),
   renameTask: (path: string, name: string) => invoke<string>('rename_task', { path, name }),

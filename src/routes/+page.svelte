@@ -11,11 +11,10 @@
   import type {
     AppConfig,
     CalendarViewState,
-    ChecklistItem,
     FolderEntry,
     FolderListing,
     ListViewState,
-    ProgressMode,
+    MetaPatch,
     Status,
     Task,
     ViewName,
@@ -218,29 +217,11 @@
         toast(`「${task.name}」をアーカイブへ移動しました`);
       } else if (task.archived) {
         const newPath = await api.reopenTask(task.path);
-        await api.setTaskMeta(
-          newPath,
-          status,
-          task.tags,
-          task.due,
-          task.memo,
-          task.checklist,
-          task.manual_progress,
-          task.progress_mode
-        );
+        await api.setTaskMeta(newPath, patchOf(task, status));
         if (selectedPath === task.path) selectedPath = newPath;
         toast(`「${task.name}」を作業ディレクトリへ戻しました`);
       } else {
-        await api.setTaskMeta(
-          task.path,
-          status,
-          task.tags,
-          task.due,
-          task.memo,
-          task.checklist,
-          task.manual_progress,
-          task.progress_mode
-        );
+        await api.setTaskMeta(task.path, patchOf(task, status));
       }
       await refresh();
     } catch (e) {
@@ -282,27 +263,23 @@
     }
   }
 
-  async function handleSaveMeta(
-    task: Task,
-    status: Status,
-    tags: string[],
-    due: string | null,
-    memo: string,
-    checklist: ChecklistItem[],
-    manualProgress: number | null,
-    progressMode: ProgressMode
-  ) {
+  /** 今のタスクの内容をそのまま送るための下敷き。状態だけ差し替えて使う */
+  function patchOf(task: Task, status: Status): MetaPatch {
+    return {
+      status,
+      tags: task.tags,
+      due: task.due,
+      memo: task.memo,
+      checklist: task.checklist,
+      manualProgress: task.manual_progress,
+      progressMode: task.progress_mode,
+      onHold: task.on_hold_since !== null,
+    };
+  }
+
+  async function handleSaveMeta(task: Task, patch: MetaPatch) {
     try {
-      await api.setTaskMeta(
-        task.path,
-        status,
-        tags,
-        due,
-        memo,
-        checklist,
-        manualProgress,
-        progressMode
-      );
+      await api.setTaskMeta(task.path, patch);
       await refresh();
     } catch (e) {
       toast(String(e), 'error');

@@ -149,7 +149,10 @@ pub fn scan_task(dir: &Path, archived: bool, stale_days: u32) -> Option<Task> {
         .or_else(|| fs::metadata(dir).ok().and_then(|m| m.modified().ok()));
     let last_activity = last_activity_time.and_then(to_rfc3339);
 
+    // 保留中は「放置」に数えない。手を止めているのは意図であって放置ではなく、
+    // ここを分けないと手の打ちようがない警告が溜まって放置検出そのものが見られなくなる
     let stale = !archived
+        && meta.on_hold_since.is_none()
         && last_activity_time.is_some_and(|t| {
             let dt: DateTime<Local> = t.into();
             Local::now() - dt > Duration::days(stale_days as i64)
@@ -226,6 +229,7 @@ pub fn scan_task(dir: &Path, archived: bool, stale_days: u32) -> Option<Task> {
         remaining_min,
         created_at,
         completed_at: meta.completed_at,
+        on_hold_since: meta.on_hold_since,
         last_activity,
         file_count,
         file_names,
@@ -400,6 +404,30 @@ mod tests {
         // ディープアーカイブ配下はスキャンされない
         assert!(!names.iter().any(|n| n.contains("古い")));
         assert!(tasks.iter().find(|t| t.name == "完了B").unwrap().archived);
+    }
+
+    #[test]
+    fn a_task_on_hold_is_not_counted_as_neglected() {
+        let dir = tempfile::tempdir().unwrap();
+        let task = dir.path().join("20260101_回答待ち");
+        fs::create_dir_all(&task).unwrap();
+
+        // 更新が止まっていれば放置として印が付く
+        let idle = scan_task(&task, false, 0).unwrap();
+        assert!(idle.stale);
+
+        // 保留にすると印が消える。手を止めているのは意図であって放置ではない
+        write_meta(
+            &task,
+            &TaskMeta {
+                on_hold_since: Some(Local::now().to_rfc3339()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let held = scan_task(&task, false, 0).unwrap();
+        assert!(!held.stale);
+        assert!(held.on_hold_since.is_some());
     }
 
     #[test]
