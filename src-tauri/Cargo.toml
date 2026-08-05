@@ -1,7 +1,7 @@
 [package]
 name = "fubako"
 version = "0.1.0"
-description = "作業ディレクトリ単位のTODO管理アプリ"
+description = "Folder-based task manager for Windows"
 authors = ["Taka-S-dev"]
 license = "MIT"
 edition = "2021"
