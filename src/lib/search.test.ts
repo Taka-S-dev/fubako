@@ -3,6 +3,7 @@ import {
   applyTagToQuery,
   collectTags,
   filterTasks,
+  matchHint,
   parseTerms,
   tagSuggestions,
 } from './search';
@@ -85,6 +86,36 @@ describe('filterTasks', () => {
   it('英字は大文字小文字を区別しない', () => {
     const t = [task({ name: 'API調査', file_names: ['README.md'] })];
     expect(filterTasks(t, parseTerms('readme'))).toHaveLength(1);
+  });
+});
+
+describe('matchHint', () => {
+  it('カードに出ている名前で当たったなら何も言わない', () => {
+    const t = task({ name: '障害調査' });
+    expect(matchHint(t, parseTerms('障害'))).toBeNull();
+  });
+
+  it('ファイル名で当たったらそのファイル名を返す', () => {
+    const t = task({ name: '記事執筆', file_names: ['資料\\下書き.md'] });
+    expect(matchHint(t, parseTerms('下書き'))).toBe('資料\\下書き.md');
+  });
+
+  it('やること・補足で当たったらその場所を返す', () => {
+    const withChecklist = task({
+      checklist: [{ text: '在庫表を更新', done: false, estimate_min: null }],
+    });
+    expect(matchHint(withChecklist, parseTerms('在庫表'))).toBe('やること');
+    expect(matchHint(task({ memo: '担当は経理' }), parseTerms('経理'))).toBe('補足');
+  });
+
+  it('語が複数の場所に散っているときは何も言わない', () => {
+    // 「ここが一致した」と1箇所を示すと嘘になる
+    const t = task({ name: '調査', memo: '担当は経理', file_names: ['下書き.md'] });
+    expect(matchHint(t, parseTerms('経理 下書き'))).toBeNull();
+  });
+
+  it('タグだけの絞り込みでは出さない', () => {
+    expect(matchHint(task({ tags: ['調査'] }), parseTerms('#調査'))).toBeNull();
   });
 });
 

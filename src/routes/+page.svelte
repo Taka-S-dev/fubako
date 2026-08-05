@@ -6,7 +6,7 @@
   import { ask, open as openDialog } from '@tauri-apps/plugin-dialog';
   import { api } from '$lib/api';
   import { CardDrag } from '$lib/dnd.svelte';
-  import { collectTags, filterTasks, parseTerms } from '$lib/search';
+  import { collectTags, filterTasks, matchHint, parseTerms } from '$lib/search';
   import { SEPARATOR, wantsNativeMenu, type MenuItem, type OpenMenu } from '$lib/menu';
   import type {
     AppConfig,
@@ -82,6 +82,15 @@
   const allTags = $derived(collectTags(tasks));
   const terms = $derived(parseTerms(query));
   const filtered = $derived(filterTasks(tasks, terms));
+  // カードに出ていない場所で当たったものだけ、一致箇所を持つ
+  const hints = $derived.by(() => {
+    const map = new Map<string, string>();
+    for (const t of filtered) {
+      const hint = matchHint(t, terms);
+      if (hint) map.set(t.path, hint);
+    }
+    return map;
+  });
 
   async function refresh() {
     try {
@@ -590,6 +599,7 @@
         <ListView
           tasks={filtered}
           {selectedPath}
+          {hints}
           state={listState}
           onselect={selectCard}
           onopen={openCard}
@@ -609,6 +619,7 @@
         <BoardView
           tasks={filtered}
           {selectedPath}
+          {hints}
           dragOver={drag.over}
           dragging={drag.dragging}
           filtering={!!query}

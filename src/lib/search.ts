@@ -53,6 +53,34 @@ export function filterTasks(tasks: Task[], terms: SearchTerms): Task[] {
   });
 }
 
+/**
+ * カードに出ていない場所で一致したとき、その場所を返す（出ているなら null）。
+ * ファイル名・補足・やることで当たった作業は、カードのどこを見ても
+ * 打った文字が無く、なぜ出てきたのか分からないため。
+ * 一致した場所を1つに特定できないときは、誤解を招くので何も言わない
+ */
+export function matchHint(task: Task, terms: SearchTerms): string | null {
+  if (!terms.text.length) return null;
+  const shown = [task.folder_name, task.name, task.tags.join(' ')].join(' ').toLowerCase();
+  const hidden = terms.text.map((w) => w.toLowerCase()).filter((w) => !shown.includes(w));
+  if (!hidden.length) return null;
+
+  // ファイル名は当たった名前そのものが手がかりになる
+  const file = task.file_names.find((n) => {
+    const lower = n.toLowerCase();
+    return hidden.every((w) => lower.includes(w));
+  });
+  if (file) return file;
+
+  const checklist = task.checklist.map((i) => i.text).join(' ').toLowerCase();
+  if (hidden.every((w) => checklist.includes(w))) return 'やること';
+
+  const memo = task.memo.toLowerCase();
+  if (hidden.every((w) => memo.includes(w))) return '補足';
+
+  return null;
+}
+
 export function filterLabel(terms: SearchTerms): string {
   const parts: string[] = [];
   if (terms.tags.length) parts.push(`タグ「${terms.tags.join('」「')}」`);

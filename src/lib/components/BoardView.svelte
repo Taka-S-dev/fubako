@@ -5,6 +5,7 @@
   let {
     tasks,
     selectedPath,
+    hints,
     dragOver,
     dragging,
     filtering,
@@ -15,6 +16,8 @@
   }: {
     tasks: Task[];
     selectedPath: string | null;
+    /** 検索の一致箇所（カードに出ていない場所で当たったものだけ） */
+    hints: Map<string, string>;
     /** ドロップ先として光らせる列 */
     dragOver: Status | null;
     dragging: boolean;
@@ -67,6 +70,7 @@
           <TaskCard
             {task}
             selected={task.path === selectedPath}
+            hint={hints.get(task.path) ?? null}
             {onselect}
             {onopen}
             {onpointerdown}

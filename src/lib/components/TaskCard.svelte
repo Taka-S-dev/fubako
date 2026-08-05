@@ -5,6 +5,7 @@
   let {
     task,
     selected = false,
+    hint = null,
     onselect,
     onopen,
     onpointerdown,
@@ -12,6 +13,8 @@
   }: {
     task: Task;
     selected?: boolean;
+    /** 検索の一致箇所。カードに出ていない場所で当たったときだけ入る */
+    hint?: string | null;
     onselect: (t: Task) => void;
     onopen: (t: Task) => void;
     onpointerdown: (e: PointerEvent, t: Task) => void;
@@ -74,6 +77,10 @@
       <span class="tag">{tag}</span>
     {/each}
   </div>
+  <!-- 検索で当たった場所がカードに出ていないときだけ、その場所を伝える -->
+  {#if hint}
+    <div class="hit" title="この作業が検索に一致した場所">{hint} に一致</div>
+  {/if}
 </button>
 
 <style>
@@ -208,6 +215,17 @@
   }
   .sep {
     color: var(--line-strong);
+  }
+  /* 絞り込み中だけ現れる行。作業そのものの情報ではないので控えめに置く */
+  .hit {
+    margin-top: 5px;
+    padding-top: 5px;
+    border-top: 1px dashed var(--line);
+    font-size: 11px;
+    color: var(--ink-2);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .tag {
     background: var(--surface-2);

@@ -5,6 +5,7 @@
   let {
     tasks,
     selectedPath,
+    hints,
     state,
     onselect,
     onopen,
@@ -12,6 +13,8 @@
   }: {
     tasks: Task[];
     selectedPath: string | null;
+    /** 検索の一致箇所（一覧に出ていない場所で当たったものだけ） */
+    hints: Map<string, string>;
     /** 表示条件は親が持つ。ビューを切り替えても選び直さずに済む */
     state: ListViewState;
     onselect: (t: Task) => void;
@@ -131,7 +134,12 @@
               {#if t.stale}<span class="stale-mini" title="放置">!</span>{/if}
             </td>
             <td class="mono dim">{fmtPrefix(t.date_prefix) ?? '—'}</td>
-            <td class="name-cell" title={t.path}>{t.name}</td>
+            <td class="name-cell" title={t.path}>
+              {t.name}
+              {#if hints.get(t.path)}
+                <span class="hit">{hints.get(t.path)} に一致</span>
+              {/if}
+            </td>
             <td>
               {#if t.progress !== null && !t.archived}
                 <span class="mini-bar-wrap">
@@ -261,6 +269,13 @@
     max-width: 260px;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+  /* 絞り込み中だけ現れる。作業名ではないので細く添える */
+  .hit {
+    margin-left: 6px;
+    font-weight: 400;
+    font-size: 11px;
+    color: var(--ink-3);
   }
   .dim {
     color: var(--ink-3);
