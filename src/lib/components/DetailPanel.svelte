@@ -5,6 +5,7 @@
     FolderListing,
     MetaPatch,
     ProgressMode,
+    TaskLink,
     Status,
     Task,
   } from '$lib/types';
@@ -29,6 +30,8 @@
     onrename,
     onsave,
     onopenentry,
+    onopenlink,
+    onlinkcontext,
     onentrycontext,
   }: {
     task: Task;
@@ -43,6 +46,8 @@
     onrename: (t: Task, name: string) => void;
     onsave: (t: Task, patch: MetaPatch) => void;
     onopenentry: (t: Task, entry: FolderEntry) => void;
+    onopenlink: (url: string) => void;
+    onlinkcontext: (e: MouseEvent, link: TaskLink) => void;
     onentrycontext: (e: MouseEvent, t: Task, entry: FolderEntry) => void;
   } = $props();
 
@@ -55,6 +60,8 @@
   let manualProgress = $state<number | null>(null);
   let progressMode = $state<ProgressMode>('auto');
   let onHold = $state(false);
+  let links = $state<TaskLink[]>([]);
+  let newLinkUrl = $state('');
   let newItemText = $state('');
 
   $effect(() => {
@@ -69,6 +76,9 @@
       manualProgress = task.manual_progress;
       progressMode = task.progress_mode;
       onHold = task.on_hold_since !== null;
+      links = task.links.map((l) => ({ ...l }));
+      newLinkUrl = '';
+      editingLink = -1;
       newItemText = '';
       renaming = false;
       editingItem = -1;
@@ -202,6 +212,7 @@
       manualProgress,
       progressMode,
       onHold,
+      links,
     });
   }
 
@@ -243,6 +254,54 @@
     e.stopPropagation();
     if (e.key === 'Enter') commitEditItem();
     if (e.key === 'Escape') editingItem = -1;
+  }
+
+  // 参照リンク。やることと同じく、操作のたびに保存する
+  function addLink() {
+    const url = newLinkUrl.trim();
+    if (!url) return;
+    links.push({ url, label: '' });
+    newLinkUrl = '';
+    save();
+  }
+
+  function removeLink(index: number) {
+    links.splice(index, 1);
+    save();
+  }
+
+  // 編集は表示名と URL の両方。鉛筆が片方だけを指すと、どちらが変わるのか
+  // 押す前に分からない。打ち間違えた URL を直す手段にもなる
+  let editingLink = $state(-1);
+  let editingLabel = $state('');
+  let editingUrl = $state('');
+  let editingLinkInput: HTMLInputElement | undefined = $state();
+
+  function startEditLink(index: number) {
+    editingLink = index;
+    editingLabel = links[index].label;
+    editingUrl = links[index].url;
+    queueMicrotask(() => editingLinkInput?.select());
+  }
+
+  function commitEditLink() {
+    if (editingLink < 0) return;
+    const index = editingLink;
+    editingLink = -1;
+    const url = editingUrl.trim();
+    // URL を空にするのは削除ではなく打ち間違いとみなし、元の値を残す
+    const label = editingLabel.trim();
+    const next = { url: url || links[index].url, label: label === url ? '' : label };
+    if (next.url !== links[index].url || next.label !== links[index].label) {
+      links[index] = next;
+      save();
+    }
+  }
+
+  function onEditLinkKeydown(e: KeyboardEvent) {
+    e.stopPropagation();
+    if (e.key === 'Enter') commitEditLink();
+    if (e.key === 'Escape') editingLink = -1;
   }
 
   // やることの操作は待たせず即保存する
@@ -501,6 +560,71 @@
         <button class="btn primary" onclick={save}>変更を保存</button>
       </div>
     {/if}
+  </section>
+
+  <!-- フォルダに入れられない置き場所。中身と違い、こちらは手で登録する -->
+  <section class="links">
+    <h3>参照 {#if links.length}<span class="count">{links.length}</span>{/if}</h3>
+    {#if links.length > 0}
+      <ul>
+        {#each links as link, i (i)}
+          <li>
+            {#if editingLink === i}
+              <div class="link-edit-rows">
+                <input
+                  class="link-edit"
+                  bind:this={editingLinkInput}
+                  bind:value={editingLabel}
+                  onkeydown={onEditLinkKeydown}
+                  placeholder="表示名（省略可）"
+                  aria-label="参照の表示名"
+                />
+                <input
+                  class="link-edit mono"
+                  bind:value={editingUrl}
+                  onkeydown={onEditLinkKeydown}
+                  onblur={commitEditLink}
+                  aria-label="参照の場所"
+                />
+              </div>
+            {:else}
+              <button
+                class="link-open"
+                title="{link.url}&#10;右クリックでコピー"
+                onclick={() => onopenlink(link.url)}
+                oncontextmenu={(e) => onlinkcontext(e, link)}
+              >
+                {link.label || link.url}
+              </button>
+              <button
+                class="icon-btn"
+                onclick={() => startEditLink(i)}
+                aria-label="この参照を編集"
+                title="表示名と場所を編集">✎</button
+              >
+              <button
+                class="icon-btn"
+                onclick={() => removeLink(i)}
+                aria-label="削除"
+                title="削除">✕</button
+              >
+            {/if}
+          </li>
+        {/each}
+      </ul>
+    {/if}
+    <div class="add-row">
+      <input
+        class="field"
+        bind:value={newLinkUrl}
+        placeholder="https://… または \\サーバー\共有\フォルダ"
+        onkeydown={(e) => {
+          e.stopPropagation();
+          if (e.key === 'Enter' && !e.isComposing) addLink();
+        }}
+      />
+      <button class="btn" onclick={addLink}>追加</button>
+    </div>
   </section>
 
   <section class="checklist">
@@ -922,6 +1046,67 @@
   }
 
   /* やること */
+  .links {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--line);
+  }
+  .links h3 {
+    margin: 0 0 8px;
+    font-size: 12px;
+    color: var(--ink-2);
+    font-weight: 600;
+  }
+  .links ul {
+    list-style: none;
+    margin: 0 0 8px;
+    padding: 0;
+  }
+  .links li {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 0;
+  }
+  /* 開けることが分かるよう下線を出す。長いパスは畳んで、全体は title で読む */
+  .link-open {
+    flex: 1;
+    min-width: 0;
+    border: 0;
+    padding: 2px 0;
+    background: none;
+    font: inherit;
+    font-size: 12px;
+    color: var(--focus);
+    text-align: left;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+  .link-open:hover {
+    text-decoration: underline;
+  }
+  .link-edit-rows {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+  .link-edit {
+    flex: 1;
+    min-width: 0;
+    padding: 1px 4px;
+    border: 1px solid var(--focus);
+    border-radius: 4px;
+    background: var(--surface);
+    font: inherit;
+    font-size: 12px;
+    color: inherit;
+  }
+  .link-edit:focus {
+    outline: none;
+  }
   .checklist {
     padding: 12px 16px;
     border-bottom: 1px solid var(--line);

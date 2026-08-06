@@ -31,6 +31,7 @@ function task(over: Partial<Task>): Task {
     created_at: null,
     completed_at: null,
     on_hold_since: null,
+    links: [],
     last_activity: null,
     file_count: 0,
     file_names: [],
@@ -76,6 +77,12 @@ describe('filterTasks', () => {
     expect(filterTasks(tasks, parseTerms('#調査 在庫'))).toHaveLength(0);
   });
 
+  it('参照リンクの表示名と URL も本文として拾う', () => {
+    const t = [task({ name: '申請', links: [{ url: 'https://example.com/req/9', label: '申請フォーム' }] })];
+    expect(filterTasks(t, parseTerms('申請フォーム'))).toHaveLength(1);
+    expect(filterTasks(t, parseTerms('req/9'))).toHaveLength(1);
+  });
+
   it('サブフォルダの中のファイル名も本文として拾う', () => {
     expect(filterTasks(tasks, parseTerms('下書き')).map((t) => t.name)).toEqual(['記事執筆']);
   });
@@ -99,6 +106,12 @@ describe('matchHint', () => {
   it('ファイル名で当たったらそのファイル名を返す', () => {
     const t = task({ name: '記事執筆', file_names: ['資料\\下書き.md'] });
     expect(matchHint(t, parseTerms('下書き'))).toBe('資料\\下書き.md');
+  });
+
+  it('参照リンクで当たったらその表示名を返す', () => {
+    const t = task({ links: [{ url: 'https://example.com/t/42', label: 'チケット' }] });
+    expect(matchHint(t, parseTerms('チケット'))).toBe('チケット');
+    expect(matchHint(t, parseTerms('t/42'))).toBe('チケット');
   });
 
   it('やること・補足で当たったらその場所を返す', () => {

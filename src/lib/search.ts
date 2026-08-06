@@ -45,6 +45,7 @@ export function filterTasks(tasks: Task[], terms: SearchTerms): Task[] {
       t.tags.join(' '),
       t.date_prefix ?? '',
       t.checklist.map((i) => i.text).join(' '),
+      t.links.map((l) => `${l.label} ${l.url}`).join(' '),
       t.file_names.join(' '),
     ]
       .join(' ')
@@ -74,6 +75,12 @@ export function matchHint(task: Task, terms: SearchTerms): string | null {
 
   const checklist = task.checklist.map((i) => i.text).join(' ').toLowerCase();
   if (hidden.every((w) => checklist.includes(w))) return 'やること';
+
+  const link = task.links.find((l) => {
+    const lower = `${l.label} ${l.url}`.toLowerCase();
+    return hidden.every((w) => lower.includes(w));
+  });
+  if (link) return link.label || link.url;
 
   const memo = task.memo.toLowerCase();
   if (hidden.every((w) => memo.includes(w))) return '補足';

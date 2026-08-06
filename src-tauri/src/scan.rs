@@ -230,6 +230,7 @@ pub fn scan_task(dir: &Path, archived: bool, stale_days: u32) -> Option<Task> {
         created_at,
         completed_at: meta.completed_at,
         on_hold_since: meta.on_hold_since,
+        links: meta.links,
         last_activity,
         file_count,
         file_names,

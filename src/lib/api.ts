@@ -21,6 +21,7 @@ export const api = {
         manual_progress: patch.manualProgress,
         progress_mode: patch.progressMode,
         on_hold: patch.onHold,
+        links: patch.links,
       },
     }),
   renameTask: (path: string, name: string) => invoke<string>('rename_task', { path, name }),
@@ -28,6 +29,8 @@ export const api = {
   importTask: (path: string) => invoke<Task>('import_task', { path }),
   deepArchiveTask: (path: string) => invoke<string>('deep_archive_task', { path }),
   reopenTask: (path: string) => invoke<string>('reopen_task', { path }),
+  /** 参照リンクを既定のアプリで開く。開ける形かは Rust 側で絞る */
+  openLink: (url: string) => invoke<void>('open_link', { url }),
   openInExplorer: (path: string) => invoke<void>('open_in_explorer', { path }),
   openEntry: (path: string) => invoke<void>('open_entry', { path }),
   listFolder: (path: string) => invoke<FolderListing>('list_folder', { path }),

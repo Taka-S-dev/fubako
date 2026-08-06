@@ -1,5 +1,6 @@
 use crate::model::{
-    AppConfig, ChecklistItem, FolderEntry, FolderListing, ProgressMode, Status, Task, TaskMeta,
+    AppConfig, ChecklistItem, FolderEntry, FolderListing, ProgressMode, Status, Task, TaskLink,
+    TaskMeta,
 };
 use crate::scan::{self, META_FILE};
 use crate::{config, watch, AppState};
@@ -23,6 +24,7 @@ pub struct MetaPatch {
     pub progress_mode: ProgressMode,
     /// 保留にするかどうか。開始時刻は受け取らず、切り替えた側で打つ
     pub on_hold: bool,
+    pub links: Vec<TaskLink>,
 }
 
 /// 別ボリューム間の移動を示す OS エラーコード
@@ -324,6 +326,12 @@ pub async fn set_task_meta(
         .collect();
     meta.progress = patch.manual_progress.map(|p| p.min(100));
     meta.progress_mode = patch.progress_mode;
+    meta.links = patch
+        .links
+        .into_iter()
+        .filter(|l| !l.url.trim().is_empty())
+        .map(|l| TaskLink { url: l.url.trim().to_string(), label: l.label.trim().to_string() })
+        .collect();
     // 保留の開始時刻はここで打つ。既に保留なら打ち直さず、いつからかを保つ
     meta.on_hold_since = match (patch.on_hold, meta.on_hold_since.take()) {
         (true, Some(since)) => Some(since),
@@ -565,6 +573,40 @@ pub async fn open_entry(
         .map_err(|e| e.to_string())
 }
 
+/// 参照リンクとして開いてよい形かを判定する。
+/// `.todo.json` はフォルダごと受け渡される可能性があるため、
+/// シェルに渡す前に web とファイルパスだけに絞る
+fn is_openable_link(url: &str) -> bool {
+    let u = url.trim();
+    if u.is_empty() {
+        return false;
+    }
+    let lower = u.to_ascii_lowercase();
+    if lower.starts_with("http://") || lower.starts_with("https://") {
+        return true;
+    }
+    // 共有フォルダ (\\server\share) とドライブレター (C:\...) のみ許す
+    if u.starts_with(r"\\") {
+        return true;
+    }
+    let bytes = u.as_bytes();
+    bytes.len() >= 3
+        && bytes[0].is_ascii_alphabetic()
+        && bytes[1] == b':'
+        && (bytes[2] == b'\\' || bytes[2] == b'/')
+}
+
+/// 参照リンクを既定のアプリで開く
+#[tauri::command]
+pub async fn open_link(app: AppHandle, url: String) -> Result<(), String> {
+    if !is_openable_link(&url) {
+        return Err("開けるのは http/https と、ドライブまたは共有フォルダのパスだけです".to_string());
+    }
+    app.opener()
+        .open_path(url.trim(), None::<&str>)
+        .map_err(|e| e.to_string())
+}
+
 /// 一覧を作るときに降りる深さ。作業フォルダは資料置き場なので、
 /// これ以上深いものは中身を見るよりエクスプローラーで開くほうが早い
 const LIST_MAX_DEPTH: u32 = 3;
@@ -781,6 +823,31 @@ mod tests {
         assert!(import_guard(&canon(deep.join("2026").join("20260101_古い調査")), &config).is_ok());
         // ただしディープアーカイブのルート自身は戻せない
         assert!(import_guard(&canon(deep.clone()), &config).is_err());
+    }
+
+    #[test]
+    fn link_targets_are_limited_to_web_and_file_paths() {
+        for ok in [
+            "https://example.com/tickets/1",
+            "http://example.com",
+            r"\\server\share\資料",
+            r"C:\work\20260802_調査",
+            "D:/work/data",
+        ] {
+            assert!(is_openable_link(ok), "開けるはず: {ok}");
+        }
+        // シェルに渡す前に弾く。.todo.json はフォルダごと受け渡されうる
+        for ng in [
+            "",
+            "   ",
+            "javascript:alert(1)",
+            "file:///C:/Windows/System32",
+            "mailto:someone@example.com",
+            "ms-settings:",
+            "example.com",
+        ] {
+            assert!(!is_openable_link(ng), "弾くはず: {ng}");
+        }
     }
 
     #[test]

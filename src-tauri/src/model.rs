@@ -29,6 +29,16 @@ pub struct ChecklistItem {
     pub estimate_min: Option<u32>,
 }
 
+/// フォルダに入れられない置き場所への参照。共有ドライブや
+/// チケットの URL など、作業に紐づくが中に持てないもの
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TaskLink {
+    pub url: String,
+    /// 表示名。空なら url をそのまま出す
+    #[serde(default)]
+    pub label: String,
+}
+
 /// 各作業フォルダ内の .todo.json に保存するメタデータ。
 /// フォルダを手動で移動してもデータが追従するよう、フォルダ内に持つ。
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -57,6 +67,8 @@ pub struct TaskMeta {
     /// completed_at と同じ「状態は時刻で持つ」形に揃う
     #[serde(default)]
     pub on_hold_since: Option<String>,
+    #[serde(default)]
+    pub links: Vec<TaskLink>,
 }
 
 /// フロントエンドへ返すタスク一件分
@@ -83,6 +95,7 @@ pub struct Task {
     pub created_at: Option<String>,
     pub completed_at: Option<String>,
     pub on_hold_since: Option<String>,
+    pub links: Vec<TaskLink>,
     pub last_activity: Option<String>,
     /// フォルダ直下の項目数
     pub file_count: usize,

@@ -24,6 +24,13 @@ export interface ChecklistItem {
   estimate_min: number | null;
 }
 
+/** フォルダに入れられない置き場所への参照（共有フォルダ・チケットの URL など） */
+export interface TaskLink {
+  url: string;
+  /** 表示名。空なら url をそのまま出す */
+  label: string;
+}
+
 export interface Task {
   path: string;
   folder_name: string;
@@ -45,6 +52,7 @@ export interface Task {
   completed_at: string | null;
   /** 保留を始めた日時。null なら保留していない */
   on_hold_since: string | null;
+  links: TaskLink[];
   last_activity: string | null;
   file_count: number;
   file_names: string[];
@@ -64,6 +72,7 @@ export interface MetaPatch {
   manualProgress: number | null;
   progressMode: ProgressMode;
   onHold: boolean;
+  links: TaskLink[];
 }
 
 export type ViewName = 'board' | 'list' | 'cal' | 'dash';

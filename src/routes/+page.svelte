@@ -17,6 +17,7 @@
     MetaPatch,
     Status,
     Task,
+    TaskLink,
     ViewName,
   } from '$lib/types';
   import BoardView from '$lib/components/BoardView.svelte';
@@ -274,6 +275,7 @@
       manualProgress: task.manual_progress,
       progressMode: task.progress_mode,
       onHold: task.on_hold_since !== null,
+      links: task.links,
     };
   }
 
@@ -297,6 +299,29 @@
 
   function handleOpen(task: Task) {
     api.openInExplorer(task.path).catch((e) => toast(String(e), 'error'));
+  }
+
+  // 開ける形かは Rust 側で絞る。弾かれた理由はそのまま伝える
+  function handleOpenLink(url: string) {
+    api.openLink(url).catch((e) => toast(String(e), 'error'));
+  }
+
+  // 場所を指すものなので、ファイル項目と同じ右クリックの作法に揃える
+  function linkMenu(e: MouseEvent, link: TaskLink) {
+    openMenu(e, [
+      { label: '開く', action: () => handleOpenLink(link.url) },
+      {
+        label: 'コピー',
+        action: async () => {
+          try {
+            await navigator.clipboard.writeText(link.url);
+            toast('リンクをコピーしました');
+          } catch {
+            toast('コピーに失敗しました', 'error');
+          }
+        },
+      },
+    ]);
   }
 
   function handleOpenEntry(task: Task, entry: FolderEntry) {
@@ -620,6 +645,8 @@
           onrename={handleRename}
           onsave={handleSaveMeta}
           onopenentry={handleOpenEntry}
+          onopenlink={handleOpenLink}
+          onlinkcontext={linkMenu}
           onentrycontext={entryMenu}
         />
       {/if}
