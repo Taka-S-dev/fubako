@@ -596,11 +596,39 @@ fn is_openable_link(url: &str) -> bool {
         && (bytes[2] == b'\\' || bytes[2] == b'/')
 }
 
-/// 参照リンクを既定のアプリで開く
+/// クリックで実行されると困る拡張子。関連付けではなくプログラムが動くもの。
+/// 完全な一覧は作れないため、禁止ではなく確認を挟む判断材料として使う
+const EXECUTABLE_EXTENSIONS: [&str; 14] = [
+    "exe", "com", "scr", "bat", "cmd", "ps1", "psm1", "vbs", "vbe", "js", "jse", "wsf", "msi",
+    "hta",
+];
+
+/// プログラムとして起動される見込みがあるか。
+/// ショートカット (.lnk) は指す先が見えないため、同じ扱いにする
+pub fn looks_executable(url: &str) -> bool {
+    let path = url.trim().trim_end_matches(['/', '\\']);
+    let Some(name) = path.rsplit(['/', '\\']).next() else {
+        return false;
+    };
+    let Some((_, ext)) = name.rsplit_once('.') else {
+        return false;
+    };
+    let ext = ext.to_ascii_lowercase();
+    ext == "lnk" || EXECUTABLE_EXTENSIONS.contains(&ext.as_str())
+}
+
+/// 参照リンクを既定のアプリで開く。
+/// `confirmed` は、プログラムを起動する見込みがあると伝えたうえで
+/// 利用者が了承したかどうか。`.todo.json` はフォルダごと他人から届きうるので、
+/// 黙って実行されることだけは避ける（禁止はしない。自分のツールを
+/// 登録して使うのは正当な用途で、拡張子を列挙しきることもできない）
 #[tauri::command]
-pub async fn open_link(app: AppHandle, url: String) -> Result<(), String> {
+pub async fn open_link(app: AppHandle, url: String, confirmed: bool) -> Result<(), String> {
     if !is_openable_link(&url) {
         return Err("開けるのは http/https と、ドライブまたは共有フォルダのパスだけです".to_string());
+    }
+    if looks_executable(&url) && !confirmed {
+        return Err("EXECUTABLE".to_string());
     }
     app.opener()
         .open_path(url.trim(), None::<&str>)
@@ -847,6 +875,27 @@ mod tests {
             "example.com",
         ] {
             assert!(!is_openable_link(ng), "弾くはず: {ng}");
+        }
+    }
+
+    #[test]
+    fn programs_are_told_apart_from_documents() {
+        for exe in [
+            r"C:	oolsiewer.exe",
+            r"\server\share\setup.MSI",
+            "D:/scripts/run.ps1",
+            r"C:\work\shortcut.lnk",
+        ] {
+            assert!(looks_executable(exe), "実行とみなすはず: {exe}");
+        }
+        for doc in [
+            "https://example.com/download",
+            r"\server\share\仕様書.xlsx",
+            r"C:\work60802_調査",
+            "D:/work/data/",
+            r"C:\work\exe",
+        ] {
+            assert!(!looks_executable(doc), "実行ではないはず: {doc}");
         }
     }
 

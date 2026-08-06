@@ -302,8 +302,28 @@
   }
 
   // 開ける形かは Rust 側で絞る。弾かれた理由はそのまま伝える
-  function handleOpenLink(url: string) {
-    api.openLink(url).catch((e) => toast(String(e), 'error'));
+  // 参照は `.todo.json` に入るため、フォルダごと他人から届くことがある。
+  // プログラムが黙って起動するのだけは避け、意図を一度だけ確かめる。
+  // 設定から来る「よく使う場所」は自分で書いたものなので確認しない
+  async function handleOpenLink(url: string, trusted = false) {
+    try {
+      await api.openLink(url, trusted);
+    } catch (e) {
+      if (String(e) !== 'EXECUTABLE') {
+        toast(String(e), 'error');
+        return;
+      }
+      const ok = await ask(`${url}
+
+これはプログラムです。実行しますか。`, {
+        title: '参照を開く',
+        kind: 'warning',
+        okLabel: '実行する',
+        cancelLabel: 'キャンセル',
+      });
+      if (!ok) return;
+      api.openLink(url, true).catch((err) => toast(String(err), 'error'));
+    }
   }
 
   // 場所を指すものなので、ファイル項目と同じ右クリックの作法に揃える
