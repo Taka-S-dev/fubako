@@ -326,6 +326,24 @@
     }
   }
 
+  /** タスクに属さない場所の一覧。ルートは設定不要で常に出す */
+  function placesMenu(e: MouseEvent) {
+    const items: MenuItem[] = [];
+    const add = (label: string, path: string | null | undefined) => {
+      if (path) items.push({ label, action: () => handleOpenLink(path, true) });
+    };
+    add('作業ディレクトリ', config?.work_root);
+    add('アーカイブ', config?.archive_root);
+    if (config?.places?.length) {
+      items.push(SEPARATOR);
+      // 末尾の区切りを落とし、フォルダ名だけを見出しにする
+      for (const place of config.places) {
+        add(place.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || place, place);
+      }
+    }
+    openMenu(e, items);
+  }
+
   // 場所を指すものなので、ファイル項目と同じ右クリックの作法に揃える
   function linkMenu(e: MouseEvent, link: TaskLink) {
     openMenu(e, [
@@ -602,6 +620,7 @@
     shown={filtered.length}
     showFilterBar={loaded && configured}
     oncreate={() => (showCreate = true)}
+    onplaces={placesMenu}
     onsettings={() => (showSettings = true)}
     ontogglepin={togglePinned}
   />

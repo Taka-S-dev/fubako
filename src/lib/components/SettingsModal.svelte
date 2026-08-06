@@ -28,6 +28,7 @@
   let hotkey = $state(initial.hotkey);
   let staleDays = $state(initial.stale_days);
   let templatesText = $state(initial.template_files.join('\n'));
+  let placesText = $state((initial.places ?? []).join('\n'));
   let auto = $state(initialAutostart);
 
   async function pick(target: 'work' | 'archive' | 'deep') {
@@ -37,6 +38,16 @@
       else if (target === 'archive') archiveRoot = dir;
       else deepRoot = dir;
     }
+  }
+
+  // 既存の行を保ったまま末尾へ足す。並べ替えと削除は欄で直接できる
+  async function addPlace() {
+    const dir = await openDialog({ directory: true, title: 'フォルダを選択' });
+    if (typeof dir !== 'string') return;
+    const lines = placesText.split('\n').filter((l) => l.trim());
+    if (lines.includes(dir)) return;
+    lines.push(dir);
+    placesText = lines.join('\n');
   }
 
   function save() {
@@ -51,6 +62,10 @@
         hotkey: hotkey.trim(),
         stale_days: Math.max(1, Number(staleDays) || 14),
         template_files: templatesText
+          .split('\n')
+          .map((s) => s.trim())
+          .filter(Boolean),
+        places: placesText
           .split('\n')
           .map((s) => s.trim())
           .filter(Boolean),
@@ -189,6 +204,22 @@
       ></textarea>
       <p class="hint">1行1項目。末尾が / ならフォルダを作成</p>
     </div>
+    <div class="row">
+      <span class="label">よく使う場所</span>
+      <div class="pick">
+        <textarea
+          class="field mono"
+          rows="3"
+          bind:value={placesText}
+          placeholder={'C:\\work\\一時置き\n\\\\server\\共有'}
+        ></textarea>
+        <button class="btn" onclick={addPlace}>追加…</button>
+      </div>
+      <p class="hint">
+        1行1つ。共有フォルダのパスは貼り付けても構いません。
+        作業ディレクトリとアーカイブは設定しなくても一覧に出ます
+      </p>
+    </div>
     <label class="auto">
       <input type="checkbox" bind:checked={auto} />
       Windows サインイン時に起動する（トレイに常駐）
@@ -240,6 +271,10 @@
   }
   .pick .field {
     flex: 1;
+  }
+  /* 複数行の欄に添える選択ボタンは、伸びずに上端へ揃える */
+  .pick > .btn {
+    align-self: flex-start;
   }
   .days {
     width: 90px;

@@ -136,6 +136,10 @@ pub struct AppConfig {
     pub stale_days: u32,
     #[serde(default = "default_templates")]
     pub template_files: Vec<String>,
+    /// タスクに属さないが日常的に開く場所（一時置き・共有の資料置き場など）。
+    /// 作業ディレクトリとアーカイブは設定不要で常に開けるため、ここには入れない
+    #[serde(default)]
+    pub places: Vec<String>,
     /// 隠し設定: ウィンドウタイトルとヘッダー表記を置き換える。
     /// 設定UIには出さず config.json の直接編集でのみ変更する。空文字で表記を消す
     #[serde(default)]
@@ -171,6 +175,7 @@ impl Default for AppConfig {
             hotkey: default_hotkey(),
             stale_days: default_stale_days(),
             template_files: default_templates(),
+            places: Vec::new(),
             display_name: None,
             deep_archive_root: None,
             deep_archive_months: default_deep_archive_months(),

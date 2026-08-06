@@ -101,6 +101,8 @@ export interface AppConfig {
   hotkey: string;
   stale_days: number;
   template_files: string[];
+  /** タスクに属さないが日常的に開く場所 */
+  places: string[];
   /** 隠し設定: config.json 直接編集でのみ変更。UI表記とタイトルを置き換える */
   display_name: string | null;
   deep_archive_root: string | null;
