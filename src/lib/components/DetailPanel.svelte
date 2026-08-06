@@ -79,6 +79,8 @@
       links = task.links.map((l) => ({ ...l }));
       newLinkUrl = '';
       editingLink = -1;
+      opening = -1;
+      busyRow = -1;
       newItemText = '';
       renaming = false;
       editingItem = -1;
@@ -256,6 +258,63 @@
     if (e.key === 'Escape') editingItem = -1;
   }
 
+  // ネットワーク越しの共有フォルダはエクスプローラーが出るまで数秒かかる。
+  // その間に反応が無いと押し直され、窓が何枚も開く。open_path はシェルが
+  // 要求を受け取った時点で戻るため、完了は戻り値では分からない。
+  // 代わりに、相手のウィンドウが出てこちらが焦点を失うのを合図にする。
+  // かかる時間は場所によって桁が違うので、固定の待ち時間では合わせられない
+
+  /** 開かなかったときに押し直せなくならないための保険 */
+  const OPEN_GUARD_MS = 8000;
+  /** これより速く開くなら手応えは要らない。出してすぐ消すとちらつくだけ */
+  const BUSY_DELAY_MS = 300;
+  /** 一度出したら最低これだけは残す。出た直後に消えると瞬きに見える */
+  const BUSY_MIN_MS = 400;
+
+  // 連打の抑止（押した瞬間から）と、表示（遅らせる）は別物として持つ。
+  // 同じ場所を2件登録できるので、URL ではなく行そのもので覚える
+  let opening = $state(-1);
+  let busyRow = $state(-1);
+  let shownAt = 0;
+  let guardTimer: ReturnType<typeof setTimeout> | undefined;
+  let showTimer: ReturnType<typeof setTimeout> | undefined;
+  let hideTimer: ReturnType<typeof setTimeout> | undefined;
+
+  function clearOpening() {
+    if (opening < 0) return;
+    opening = -1;
+    clearTimeout(guardTimer);
+    clearTimeout(showTimer);
+    if (busyRow < 0) return;
+    const shownFor = performance.now() - shownAt;
+    if (shownFor >= BUSY_MIN_MS) {
+      busyRow = -1;
+    } else {
+      hideTimer = setTimeout(() => (busyRow = -1), BUSY_MIN_MS - shownFor);
+    }
+  }
+
+  function requestOpenLink(index: number) {
+    if (opening === index) return;
+    clearTimeout(guardTimer);
+    clearTimeout(showTimer);
+    clearTimeout(hideTimer);
+    opening = index;
+    busyRow = -1;
+    showTimer = setTimeout(() => {
+      busyRow = index;
+      shownAt = performance.now();
+    }, BUSY_DELAY_MS);
+    guardTimer = setTimeout(clearOpening, OPEN_GUARD_MS);
+    onopenlink(links[index].url);
+  }
+
+  /** 押した先がブラウザかエクスプローラーかを、表示名の裏に隠れても分かるようにする */
+  function isWebLink(url: string): boolean {
+    const u = url.trim().toLowerCase();
+    return u.startsWith('http://') || u.startsWith('https://');
+  }
+
   // 参照リンク。やることと同じく、操作のたびに保存する
   function addLink() {
     const url = newLinkUrl.trim();
@@ -266,6 +325,9 @@
   }
 
   function removeLink(index: number) {
+    // 行が詰まると位置がずれるため、進行中の目印は落とす
+    opening = -1;
+    busyRow = -1;
     links.splice(index, 1);
     save();
   }
@@ -340,6 +402,9 @@
     }
   }
 </script>
+
+<!-- 開いた相手のウィンドウが前に出たら、開き終わったとみなす -->
+<svelte:window onblur={clearOpening} />
 
 <aside class="panel">
   <header>
@@ -570,7 +635,15 @@
         {#each links as link, i (i)}
           <li>
             {#if editingLink === i}
-              <div class="link-edit-rows">
+              <!-- 確定は欄ごとではなく、2つを囲むこの箱から焦点が出たとき。
+                   欄ごとに閉じると、表示名から場所へ移るだけで編集が終わる -->
+              <div
+                class="link-edit-rows"
+                onfocusout={(e) => {
+                  if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+                  commitEditLink();
+                }}
+              >
                 <input
                   class="link-edit"
                   bind:this={editingLinkInput}
@@ -583,19 +656,47 @@
                   class="link-edit mono"
                   bind:value={editingUrl}
                   onkeydown={onEditLinkKeydown}
-                  onblur={commitEditLink}
                   aria-label="参照の場所"
                 />
               </div>
             {:else}
+              <!-- 種類のアイコン。フォルダの中身と同じく、名前を読まずに行き先が分かる -->
+              <svg
+                class="link-icon"
+                class:spinning={busyRow === i}
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                {#if busyRow === i}
+                  <!-- 開くまで数秒かかるので、その間はここが回って動きを出す -->
+                  <path d="M21 12a9 9 0 1 1-6.2-8.6" />
+                {:else if isWebLink(link.url)}
+                  <circle cx="12" cy="12" r="9" />
+                  <path d="M3 12h18" />
+                  <path d="M12 3a14 14 0 0 1 0 18a14 14 0 0 1 0-18" />
+                {:else}
+                  <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" />
+                {/if}
+              </svg>
               <button
                 class="link-open"
                 title="{link.url}&#10;右クリックでコピー"
-                onclick={() => onopenlink(link.url)}
+                onclick={() => requestOpenLink(i)}
                 oncontextmenu={(e) => onlinkcontext(e, link)}
               >
                 {link.label || link.url}
               </button>
+              {#if busyRow === i}
+                <!-- 回転が使えない環境向け。既定では隠れている -->
+                <span class="link-opening">開いています…</span>
+              {/if}
               <button
                 class="icon-btn"
                 onclick={() => startEditLink(i)}
@@ -1066,6 +1167,35 @@
     align-items: center;
     gap: 4px;
     padding: 2px 0;
+  }
+  .link-icon {
+    flex: none;
+    color: var(--ink-3);
+  }
+  .link-icon.spinning {
+    color: var(--focus);
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+  .link-opening {
+    display: none;
+    flex: none;
+    font-size: 11px;
+    color: var(--ink-3);
+  }
+  /* 動きを抑える設定では回転の代わりに文言で伝える。
+     回さないだけにすると、その設定の人だけ手応えが無くなる */
+  @media (prefers-reduced-motion: reduce) {
+    .link-icon.spinning {
+      animation: none;
+    }
+    .link-opening {
+      display: inline;
+    }
   }
   /* 開けることが分かるよう下線を出す。長いパスは畳んで、全体は title で読む */
   .link-open {
