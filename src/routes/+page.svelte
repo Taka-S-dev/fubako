@@ -203,6 +203,12 @@
     selectedPath = t.path;
   }
 
+  /** 完了列に入り切らないぶんは、絞り込み済みのリストで見せる */
+  function showDoneInList() {
+    listState.statusFilter = 'done';
+    view = 'list';
+  }
+
   // エクスプローラーと同じ作法。押したカードを選んだうえで開く
   function openCard(t: Task) {
     selectedPath = t.path;
@@ -666,6 +672,7 @@
           filtering={!!query}
           onselect={selectCard}
           onopen={openCard}
+          onshowdone={showDoneInList}
           onpointerdown={drag.start}
           oncontext={taskMenu}
         />
