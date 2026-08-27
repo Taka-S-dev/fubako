@@ -6,6 +6,7 @@ mod ops;
 mod scan;
 mod tray;
 mod watch;
+mod window;
 
 use std::sync::Mutex;
 use tauri::{Emitter, Manager};
@@ -52,7 +53,11 @@ pub fn run() {
             });
             watch::restart(app.handle(), &cfg);
             tray::setup(app)?;
+            let win = window::create(app)?;
             ops::apply_display_name(app.handle(), &cfg);
+            if let Some(state) = cfg.window {
+                window::restore(&win, &state);
+            }
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -81,6 +86,15 @@ pub fn run() {
             ops::get_autostart,
             ops::set_autostart,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while running tauri application")
+        .run(|app, event| {
+            // 動かすたびではなく終了時に一度だけ。ドラッグ中ずっと
+            // 設定ファイルを書き換えないため
+            if let tauri::RunEvent::ExitRequested { .. } = event {
+                let state = app.state::<AppState>();
+                let mut config = state.config.lock().unwrap();
+                window::save(app, &mut config);
+            }
+        });
 }

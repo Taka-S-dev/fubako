@@ -107,6 +107,14 @@ export interface AppConfig {
   /** タスクに属さないが日常的に開く場所 */
   places: string[];
   theme: Theme;
+  /** 前回のウィンドウの大きさと位置。アプリが書き、設定画面は触らない */
+  window: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    maximized: boolean;
+  } | null;
   /** 隠し設定: config.json 直接編集でのみ変更。UI表記とタイトルを置き換える */
   display_name: string | null;
   deep_archive_root: string | null;

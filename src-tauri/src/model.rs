@@ -39,6 +39,17 @@ pub struct TaskLink {
     pub label: String,
 }
 
+/// 前回のウィンドウの大きさと位置。付箋として細く置いた形も次回そのまま出す
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WindowState {
+    pub x: i32,
+    pub y: i32,
+    pub width: u32,
+    pub height: u32,
+    #[serde(default)]
+    pub maximized: bool,
+}
+
 /// 画面の地の明暗。Auto は OS の設定に従う
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
@@ -152,6 +163,8 @@ pub struct AppConfig {
     pub places: Vec<String>,
     #[serde(default)]
     pub theme: Theme,
+    #[serde(default)]
+    pub window: Option<WindowState>,
     /// 隠し設定: ウィンドウタイトルとヘッダー表記を置き換える。
     /// 設定UIには出さず config.json の直接編集でのみ変更する。空文字で表記を消す
     #[serde(default)]
@@ -189,6 +202,7 @@ impl Default for AppConfig {
             template_files: default_templates(),
             places: Vec::new(),
             theme: Theme::default(),
+            window: None,
             display_name: None,
             deep_archive_root: None,
             deep_archive_months: default_deep_archive_months(),
