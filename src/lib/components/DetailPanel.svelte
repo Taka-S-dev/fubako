@@ -309,10 +309,31 @@
     onopenlink(links[index].url);
   }
 
-  /** 押した先がブラウザかエクスプローラーかを、表示名の裏に隠れても分かるようにする */
-  function isWebLink(url: string): boolean {
-    const u = url.trim().toLowerCase();
-    return u.startsWith('http://') || u.startsWith('https://');
+  /**
+   * 押した先が何で開くかを、表示名の裏に隠れても分かるようにする。
+   * 実物は見に行かない。参照の先は切断中の共有や不在のパスであり得るので、
+   * 絵を選ぶためだけにディスクへ問い合わせると、繋がらない場所で待たされる。
+   * 名前に拡張子があるかで見分けるため、ドットを含むフォルダは外すが、
+   * 外れても絵がずれるだけで開く動作は変わらない
+   */
+  function linkKind(url: string): 'web' | 'file' | 'folder' {
+    const u = url.trim();
+    const lower = u.toLowerCase();
+    if (lower.startsWith('http://') || lower.startsWith('https://')) return 'web';
+    const name = u.replace(/[\\/]+$/, '').split(/[\\/]/).pop() ?? '';
+    return /\.[^.]+$/.test(name) ? 'file' : 'folder';
+  }
+
+  /**
+   * 表示名が無いときに出す文字。パスは頭から詰めると、ドライブと共通の親という
+   * 一番どうでもいい部分だけが残り、何を指しているか読めなくなる。
+   * 識別に効くのは末尾なので、そこだけを出す。全体はホバーの title で読める
+   */
+  function linkLabel(link: TaskLink): string {
+    if (link.label) return link.label;
+    const u = link.url.trim();
+    if (linkKind(u) === 'web') return u;
+    return u.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || u;
   }
 
   // 参照リンク。やることと同じく、操作のたびに保存する
@@ -677,10 +698,13 @@
                 {#if busyRow === i}
                   <!-- 開くまで数秒かかるので、その間はここが回って動きを出す -->
                   <path d="M21 12a9 9 0 1 1-6.2-8.6" />
-                {:else if isWebLink(link.url)}
+                {:else if linkKind(link.url) === 'web'}
                   <circle cx="12" cy="12" r="9" />
                   <path d="M3 12h18" />
                   <path d="M12 3a14 14 0 0 1 0 18a14 14 0 0 1 0-18" />
+                {:else if linkKind(link.url) === 'file'}
+                  <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8Z" />
+                  <path d="M14 3v5h5" />
                 {:else}
                   <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" />
                 {/if}
@@ -691,7 +715,7 @@
                 onclick={() => requestOpenLink(i)}
                 oncontextmenu={(e) => onlinkcontext(e, link)}
               >
-                {link.label || link.url}
+                {linkLabel(link)}
               </button>
               {#if busyRow === i}
                 <!-- 回転が使えない環境向け。既定では隠れている -->
