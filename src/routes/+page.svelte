@@ -485,8 +485,8 @@
       else if (showSettings) showSettings = false;
       // 絞り込み中はまず解除する（フィルタバーの案内と一致させる）
       else if (query) topBar?.clear();
-      else if (selectedPath) selectedPath = null;
-      // 解除するものが無くなったらウィンドウ自体をしまう。
+      // 選択は解除せずにしまう。しまうために選択を捨てさせると、呼び戻した
+      // ときに続きから始められない。パネルを閉じるだけなら右上の × を使う。
       // 初期設定中だけは、行き先が分からなくなるので残す
       else if (configured) hideToTray();
       return;
@@ -513,7 +513,12 @@
       moveSelection(e.key === 'ArrowRight' ? 1 : -1, 0);
       return;
     }
-    if (e.ctrlKey && e.key.toLowerCase() === 'n') {
+    if (e.ctrlKey && e.key.toLowerCase() === 'w') {
+      // 閉じるボタンと同じく、選んでいるものを保ったまましまう。
+      // Esc は絞り込みや選択を片付けてから閉じるので、続きから戻れない
+      e.preventDefault();
+      if (configured) hideToTray();
+    } else if (e.ctrlKey && e.key.toLowerCase() === 'n') {
       e.preventDefault();
       showCreate = true;
     } else if (e.ctrlKey && e.key.toLowerCase() === 'f') {
