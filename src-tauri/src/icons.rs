@@ -164,7 +164,7 @@ unsafe fn to_rgba(
     // GDI は BGRA で返す。アルファが全て 0 のときは
     // 透過情報を持たない古い形式なので、不透明として扱う
     let opaque = buffer.iter().skip(3).step_by(4).all(|&a| a == 0);
-    for px in buffer.chunks_exact_mut(4) {
+    for px in buffer.as_chunks_mut::<4>().0 {
         px.swap(0, 2);
         if opaque {
             px[3] = 255;
