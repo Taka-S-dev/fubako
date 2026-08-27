@@ -293,7 +293,7 @@
     padding: 7px 16px;
     background: var(--manila-soft);
     border-bottom: 1px solid var(--manila);
-    color: #7a5310;
+    color: var(--manila-ink);
     font-size: 12.5px;
   }
   .filter-term {
@@ -306,14 +306,14 @@
     margin-left: auto;
     border: 1px solid var(--manila);
     background: var(--surface);
-    color: #7a5310;
+    color: var(--manila-ink);
     border-radius: 99px;
     padding: 3px 12px;
     font-size: 11.5px;
   }
   .filter-clear:hover {
     background: var(--manila);
-    color: #fff;
+    color: var(--on-solid);
   }
   .clear {
     position: absolute;
@@ -390,7 +390,7 @@
   }
   .view-btn.active {
     background: var(--ink);
-    color: #fff;
+    color: var(--on-solid);
   }
   .gear {
     padding: 0;
@@ -408,7 +408,7 @@
   .gear.pinned {
     background: var(--manila-soft);
     border-color: var(--manila);
-    color: #7a5310;
+    color: var(--manila-ink);
   }
 
   /* 付箋のように細くしたときは、ヘッダーを削って一覧に幅を渡す */

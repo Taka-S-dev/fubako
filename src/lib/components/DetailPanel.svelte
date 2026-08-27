@@ -997,7 +997,7 @@
     gap: 3px;
     background: var(--manila-soft);
     border: 1px solid var(--manila-tab);
-    color: #7a5310;
+    color: var(--manila-ink);
     border-radius: 99px;
     padding: 1px 4px 1px 9px;
     font-size: 11.5px;
@@ -1006,7 +1006,7 @@
   .chip-x {
     border: none;
     background: none;
-    color: #a8792c;
+    color: var(--manila-ink-2);
     font-size: 9px;
     line-height: 1;
     padding: 2px 3px;
@@ -1014,7 +1014,7 @@
   }
   .chip-x:hover {
     background: var(--manila);
-    color: #fff;
+    color: var(--on-solid);
   }
   .tag-input {
     flex: 1;
@@ -1139,7 +1139,7 @@
   }
   .seg-btn.active {
     background: var(--ink);
-    color: #fff;
+    color: var(--on-solid);
   }
   .save-row {
     display: flex;
@@ -1265,7 +1265,7 @@
   }
   .mode-btn.active {
     background: var(--ink);
-    color: #fff;
+    color: var(--on-solid);
   }
   .bar {
     flex: 1;

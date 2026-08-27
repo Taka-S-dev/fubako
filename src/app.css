@@ -20,7 +20,20 @@
   --red-soft: #f5dedb;
 
   --accent: #cf8a1d;
+  /* 強調のマニラを一段濃くしたもの（グラフの hover など） */
+  --manila-strong: #b87a17;
   --focus: #2f6fd0;
+
+  /* 濃い地（--ink / --manila / --red など）の上に乗る文字。
+     地の色が変わっても読めるよう、白を直に書かずここを通す */
+  --on-solid: #ffffff;
+  /* マニラ色の面に乗る文字。地と同系で濃さだけを落としたもの */
+  --manila-ink: #7a5310;
+  --manila-ink-2: #a8792c;
+  /* モーダルの覆い */
+  --scrim: rgba(35, 39, 45, 0.35);
+  /* 保留カードの地。面（--surface）と面の灰（--surface-2）の中間 */
+  --surface-sunk: #f8f9fb;
 
   --radius: 8px;
   --shadow: 0 1px 2px rgba(35, 39, 45, 0.06), 0 4px 14px rgba(35, 39, 45, 0.05);

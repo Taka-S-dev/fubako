@@ -347,11 +347,11 @@
   .chip.selected,
   .chip.selected:hover {
     background: var(--ink);
-    color: #fff;
+    color: var(--on-solid);
     box-shadow: var(--shadow);
   }
   .chip.selected .chip-name {
-    color: #fff;
+    color: var(--on-solid);
     font-weight: 600;
   }
   .chip-dot {

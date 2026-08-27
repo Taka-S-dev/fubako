@@ -126,9 +126,8 @@
   /* 保留は「今は見なくていい」状態なので、白を落として背景側へ沈める。
      状態を表すタブの色には触れない */
   .card.on-hold {
-    /* 白（--surface）と面の灰（--surface-2）の中間。影を消してあるぶん、
-       塗りは弱くても十分沈む */
-    background: #f8f9fb;
+    /* 影を消してあるぶん、塗りは弱くても十分沈む */
+    background: var(--surface-sunk);
     box-shadow: none;
   }
   /* 沈めたぶん進捗のオレンジだけが浮くため、こちらも色を落とす。
@@ -190,7 +189,7 @@
   }
   .badge.due.overdue {
     background: var(--red);
-    color: #fff;
+    color: var(--on-solid);
   }
 
   .name {

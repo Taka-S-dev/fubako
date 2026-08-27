@@ -280,7 +280,7 @@
     background: var(--slate-soft);
   }
   .col:hover .vbar:not(.zero) {
-    background: #b87a17;
+    background: var(--manila-strong);
   }
   .x-label {
     text-align: center;
@@ -294,7 +294,7 @@
     left: 50%;
     transform: translateX(-50%);
     background: var(--ink);
-    color: #fff;
+    color: var(--on-solid);
     font-size: 10.5px;
     padding: 2px 8px;
     border-radius: 6px;

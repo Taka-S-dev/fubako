@@ -785,7 +785,7 @@
   }
   .toast {
     background: var(--ink);
-    color: #fff;
+    color: var(--on-solid);
     padding: 8px 16px;
     border-radius: 99px;
     font-size: 12.5px;

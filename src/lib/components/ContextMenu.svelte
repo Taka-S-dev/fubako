@@ -132,7 +132,7 @@
   }
   button.danger.active {
     background: var(--red);
-    color: #fff;
+    color: var(--on-solid);
   }
   hr {
     margin: 4px 6px;

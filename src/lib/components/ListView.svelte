@@ -201,7 +201,7 @@
   .chip.active {
     background: var(--ink);
     border-color: var(--ink);
-    color: #fff;
+    color: var(--on-solid);
   }
   .chip-count {
     font-size: 10.5px;
