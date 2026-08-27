@@ -18,6 +18,7 @@
     Status,
     Task,
     TaskLink,
+    Theme,
     ViewName,
   } from '$lib/types';
   import BoardView from '$lib/components/BoardView.svelte';
@@ -74,6 +75,21 @@
       toasts = toasts.filter((t) => t.id !== id);
     }, 4000);
   }
+
+  // 地の明暗は設定が「自動」なら OS に従う。app.html が先に OS の値を
+  // 置いているので、ここは設定を読んだあとの上書きと、自動のときの追従を担う
+  const prefersDark =
+    typeof window === 'undefined' ? null : window.matchMedia('(prefers-color-scheme: dark)');
+  let osDark = $state(prefersDark?.matches ?? false);
+  // 設定画面で選んでいる最中の試着。保存すれば config が追いつき、
+  // やめれば捨てられる。地の書き換えはこの一箇所だけが行う
+  let themePreview = $state<Theme | null>(null);
+
+  $effect(() => {
+    const theme: Theme = themePreview ?? config?.theme ?? 'auto';
+    const dark = theme === 'auto' ? osDark : theme === 'dark';
+    document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+  });
 
   const configured = $derived(!!config?.work_root && !!config?.archive_root);
   const brandName = $derived(config?.display_name ?? 'Fubako');
@@ -379,6 +395,7 @@
       await api.setAutostart(auto).catch(() => {});
       autostart = auto;
       showSettings = false;
+      themePreview = null;
       await refresh();
       // 保存自体は済んでいるので、伝えることがあっても閉じるところまでは進める
       toast(warning ?? '設定を保存しました', warning ? 'error' : 'info');
@@ -598,6 +615,9 @@
 
   onMount(() => {
     loadAll();
+    // 「自動」のとき、Windows の外観設定を切り替えたらその場で追いかける
+    const onSchemeChange = (e: MediaQueryListEvent) => (osDark = e.matches);
+    prefersDark?.addEventListener('change', onSchemeChange);
     const unlisteners = [
       listen('tasks-changed', refresh),
       listen('focus-search', () => topBar?.focusSearch(true)),
@@ -611,6 +631,7 @@
       }),
     ];
     return () => {
+      prefersDark?.removeEventListener('change', onSchemeChange);
       unlisteners.forEach((p) => p.then((u) => u()));
     };
   });
@@ -734,7 +755,11 @@
     {config}
     {autostart}
     onsave={handleSaveSettings}
-    onclose={() => (showSettings = false)}
+    onpreviewtheme={(t) => (themePreview = t)}
+    onclose={() => {
+      themePreview = null;
+      showSettings = false;
+    }}
   />
 {/if}
 

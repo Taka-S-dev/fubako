@@ -75,6 +75,9 @@ export interface MetaPatch {
   links: TaskLink[];
 }
 
+/** 画面の地の明暗。auto は OS の設定に従う */
+export type Theme = 'auto' | 'light' | 'dark';
+
 export type ViewName = 'board' | 'list' | 'cal' | 'dash';
 
 export interface FolderEntry {
@@ -103,6 +106,7 @@ export interface AppConfig {
   template_files: string[];
   /** タスクに属さないが日常的に開く場所 */
   places: string[];
+  theme: Theme;
   /** 隠し設定: config.json 直接編集でのみ変更。UI表記とタイトルを置き換える */
   display_name: string | null;
   deep_archive_root: string | null;

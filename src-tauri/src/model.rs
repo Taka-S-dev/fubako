@@ -39,6 +39,16 @@ pub struct TaskLink {
     pub label: String,
 }
 
+/// 画面の地の明暗。Auto は OS の設定に従う
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum Theme {
+    #[default]
+    Auto,
+    Light,
+    Dark,
+}
+
 /// 各作業フォルダ内の .todo.json に保存するメタデータ。
 /// フォルダを手動で移動してもデータが追従するよう、フォルダ内に持つ。
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -140,6 +150,8 @@ pub struct AppConfig {
     /// 作業ディレクトリとアーカイブは設定不要で常に開けるため、ここには入れない
     #[serde(default)]
     pub places: Vec<String>,
+    #[serde(default)]
+    pub theme: Theme,
     /// 隠し設定: ウィンドウタイトルとヘッダー表記を置き換える。
     /// 設定UIには出さず config.json の直接編集でのみ変更する。空文字で表記を消す
     #[serde(default)]
@@ -176,6 +188,7 @@ impl Default for AppConfig {
             stale_days: default_stale_days(),
             template_files: default_templates(),
             places: Vec::new(),
+            theme: Theme::default(),
             display_name: None,
             deep_archive_root: None,
             deep_archive_months: default_deep_archive_months(),

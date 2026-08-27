@@ -1,17 +1,20 @@
 <script lang="ts">
   import { open as openDialog } from '@tauri-apps/plugin-dialog';
   import { accelFromEvent, formatAccel, isModifier } from '$lib/hotkey';
-  import type { AppConfig } from '$lib/types';
+  import type { AppConfig, Theme } from '$lib/types';
 
   let {
     config,
     autostart,
     onsave,
+    onpreviewtheme,
     onclose,
   }: {
     config: AppConfig;
     autostart: boolean;
     onsave: (config: AppConfig, autostart: boolean) => void;
+    /** 選んだ見た目をその場で当てる。保存せず閉じれば呼び出し側が戻す */
+    onpreviewtheme: (theme: Theme) => void;
     onclose: () => void;
   } = $props();
 
@@ -29,6 +32,7 @@
   let staleDays = $state(initial.stale_days);
   let templatesText = $state(initial.template_files.join('\n'));
   let placesText = $state((initial.places ?? []).join('\n'));
+  let theme = $state<Theme>(initial.theme ?? 'auto');
   let auto = $state(initialAutostart);
 
   async function pick(target: 'work' | 'archive' | 'deep') {
@@ -69,6 +73,7 @@
           .split('\n')
           .map((s) => s.trim())
           .filter(Boolean),
+        theme,
       },
       auto
     );
@@ -191,6 +196,22 @@
       </p>
     </div>
     <div class="row">
+      <span class="label">外観</span>
+      <div class="seg" role="radiogroup" aria-label="外観">
+        {#each [['auto', '自動'], ['light', 'ライト'], ['dark', 'ダーク']] as [value, label] (value)}
+          <button
+            class="seg-btn"
+            class:active={theme === value}
+            onclick={() => {
+              theme = value as Theme;
+              onpreviewtheme(theme);
+            }}>{label}</button
+          >
+        {/each}
+      </div>
+      <p class="hint">自動は Windows の設定に従います</p>
+    </div>
+    <div class="row">
       <span class="label">放置とみなす日数</span>
       <input class="field days" type="number" min="1" bind:value={staleDays} />
     </div>
@@ -283,6 +304,26 @@
     align-items: center;
     font-size: 12px;
     color: var(--ink-2);
+  }
+  .seg {
+    display: inline-flex;
+    border: 1px solid var(--line-strong);
+    border-radius: 99px;
+    overflow: hidden;
+  }
+  .seg-btn {
+    border: none;
+    background: var(--surface);
+    color: var(--ink-2);
+    padding: 5px 14px;
+    font-size: 12px;
+  }
+  .seg-btn + .seg-btn {
+    border-left: 1px solid var(--line);
+  }
+  .seg-btn.active {
+    background: var(--ink);
+    color: var(--on-solid);
   }
   .hint {
     margin: 4px 0 0;

@@ -1,8 +1,14 @@
 :root {
+  /* スクロールバー・チェックボックス・日付入力など、ブラウザが描く部品を
+     地の明暗に追従させる。これが無いと暗い画面に白い部品だけが残る */
+  color-scheme: light;
+
   --bg: #eceef1;
   --surface: #ffffff;
   --surface-2: #f4f5f7;
   --ink: #23272d;
+  /* 主ボタンの hover。地（--ink）を一段ずらしたもの */
+  --ink-hover: #3a4048;
   --ink-2: #69707d;
   --ink-3: #9aa1ad;
   --line: #dcdfe5;
@@ -43,6 +49,58 @@
      順序を逆にすると数字とパスまで Yu Gothic UI の弱い欧文字形で描かれる */
   --sans: 'Segoe UI', 'Yu Gothic UI', 'Meiryo', sans-serif;
   --mono: 'Cascadia Mono', 'Consolas', monospace;
+}
+
+/*
+ * 暗い側の配色。明るい側の色相はそのままに、面を暗く・文字を明るく反転させ、
+ * 状態色（マニラ／緑／赤／スレート）は彩度を落として地から浮きすぎないようにする。
+ * 暗い地では影が効かないため、浮きは影ではなく縁の明るさで作る。
+ *
+ * どちらを使うかはメディアクエリではなく data-theme で決める。
+ * 設定で「自動／ライト／ダーク」を選べるようにするには OS の判定を
+ * 上書きできる必要があり、メディアクエリの中では上書きできないため。
+ * 属性の付与は app.html の先頭と、設定を読んだあとのアプリ側が行う。
+ */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: #16181c;
+  --surface: #212429;
+  --surface-2: #292d33;
+  --ink: #e6e8ec;
+  --ink-hover: #ffffff;
+  --ink-2: #a7adb8;
+  --ink-3: #767d89;
+  --line: #343941;
+  --line-strong: #454b55;
+
+  --slate: #98a1b2;
+  --slate-soft: #2f343c;
+  --manila: #d9a04a;
+  --manila-soft: #3a3126;
+  --manila-tab: #6b552f;
+  --green: #6fb98a;
+  --green-soft: #24332b;
+  /* 放置・超過は気づかせる印であって異常ではない。暗い地では同じ彩度でも
+     明るい地より強く出るため、一段沈めて画面を支配しないようにする */
+  --red: #c2695f;
+  --red-soft: #35201e;
+
+  --accent: #d9a04a;
+  --manila-strong: #e5b063;
+  --focus: #6ea8f0;
+
+  /* 濃い地の上に乗る文字。暗い側では地のほうが明るいので黒に寄せる */
+  --on-solid: #16181c;
+  --manila-ink: #e0bd85;
+  --manila-ink-2: #c19d68;
+  --scrim: rgba(0, 0, 0, 0.55);
+  /* 明るい側は影を消すことで沈めていたが、暗い側の「影」は明るい縁なので
+     同じ手が効かない。代わりに地の色を背景側へ寄せて面ごと沈める */
+  --surface-sunk: #191b1f;
+
+  /* 影は暗い地に沈むだけなので、面をわずかに明るく縁取って持ち上げる */
+  --shadow: 0 0 0 1px rgba(255, 255, 255, 0.04);
+  --shadow-lift: 0 0 0 1px rgba(255, 255, 255, 0.09), 0 8px 24px rgba(0, 0, 0, 0.45);
 }
 
 * {
@@ -112,10 +170,10 @@ select {
 .btn.primary {
   background: var(--ink);
   border-color: var(--ink);
-  color: #fff;
+  color: var(--on-solid);
 }
 .btn.primary:hover {
-  background: #3a4048;
+  background: var(--ink-hover);
 }
 .btn.danger {
   color: var(--red);
