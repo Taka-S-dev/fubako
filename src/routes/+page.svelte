@@ -31,6 +31,7 @@
   import Onboarding from '$lib/components/Onboarding.svelte';
   import SettingsModal from '$lib/components/SettingsModal.svelte';
   import TopBar from '$lib/components/TopBar.svelte';
+  import CompactView from '$lib/components/CompactView.svelte';
 
   let config = $state<AppConfig | null>(null);
   let tasks = $state<Task[]>([]);
@@ -92,6 +93,16 @@
   });
 
   const configured = $derived(!!config?.work_root && !!config?.archive_root);
+
+  /**
+   * これより狭いと、ボードは3列が収まらず横スクロールになる。
+   * その幅まで縮めるのは脇に置いて使うときなので、置き場所に合わせた
+   * 表示へ切り替える。設定ではなく幅で決めるのは、細くする操作そのものが
+   * 意思表示になっているため
+   */
+  const COMPACT_WIDTH = 520;
+  let windowWidth = $state(typeof window === 'undefined' ? 1180 : window.innerWidth);
+  const compact = $derived(loaded && configured && windowWidth < COMPACT_WIDTH);
   const brandName = $derived(config?.display_name ?? 'Fubako');
   const selected = $derived(tasks.find((t) => t.path === selectedPath) ?? null);
 
@@ -637,25 +648,29 @@
   });
 </script>
 
-<svelte:window onkeydown={onKeydown} oncontextmenu={onContextMenu} />
+<svelte:window bind:innerWidth={windowWidth} onkeydown={onKeydown} oncontextmenu={onContextMenu} />
 
 <div class="app">
-  <TopBar
-    bind:this={topBar}
-    bind:query
-    bind:view
-    {brandName}
-    {configured}
-    alltags={allTags}
-    {pinned}
-    total={tasks.length}
-    shown={filtered.length}
-    showFilterBar={loaded && configured}
-    oncreate={() => (showCreate = true)}
-    onplaces={placesMenu}
-    onsettings={() => (showSettings = true)}
-    ontogglepin={togglePinned}
-  />
+  <!-- 脇に置ける幅まで縮めたときは、置き場所に合った表示へ入れ替える -->
+  {#if compact}
+    <CompactView tasks={filtered} {pinned} ontogglepin={togglePinned} onopen={handleOpen} />
+  {:else}
+    <TopBar
+      bind:this={topBar}
+      bind:query
+      bind:view
+      {brandName}
+      {configured}
+      alltags={allTags}
+      {pinned}
+      total={tasks.length}
+      shown={filtered.length}
+      showFilterBar={loaded && configured}
+      oncreate={() => (showCreate = true)}
+      onplaces={placesMenu}
+      onsettings={() => (showSettings = true)}
+      ontogglepin={togglePinned}
+    />
 
   {#if !loaded}
     <div class="center-note">読み込み中…</div>
@@ -723,6 +738,7 @@
         />
       {/if}
     </div>
+  {/if}
   {/if}
 
   {#if drag.dragging && drag.task}
