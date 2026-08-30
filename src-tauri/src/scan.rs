@@ -51,7 +51,11 @@ pub fn parse_folder_name(folder_name: &str) -> (Option<String>, String) {
     if chars.len() >= 9 && chars[..8].iter().all(|c| c.is_ascii_digit()) && chars[8] == '_' {
         let prefix: String = chars[..8].iter().collect();
         let rest: String = chars[9..].iter().collect();
-        let name = if rest.is_empty() { prefix.clone() } else { rest };
+        let name = if rest.is_empty() {
+            prefix.clone()
+        } else {
+            rest
+        };
         (Some(prefix), name)
     } else {
         (None, folder_name.to_string())
@@ -179,18 +183,22 @@ pub fn scan_task(dir: &Path, archived: bool, stale_days: u32) -> Option<Task> {
     let checklist_total = meta.checklist.len();
     let checklist_done = meta.checklist.iter().filter(|i| i.done).count();
     // 進捗率: 見積(分)があれば時間で重み付け。未入力項目は平均見積で補完
-    let estimates: Vec<u32> = meta.checklist.iter().filter_map(|i| i.estimate_min).collect();
+    let estimates: Vec<u32> = meta
+        .checklist
+        .iter()
+        .filter_map(|i| i.estimate_min)
+        .collect();
     let avg_estimate = if estimates.is_empty() {
         1
     } else {
         (estimates.iter().sum::<u32>() / estimates.len() as u32).max(1)
     };
-    let weight = |i: &crate::model::ChecklistItem| i.estimate_min.unwrap_or(avg_estimate).max(1) as u64;
+    let weight =
+        |i: &crate::model::ChecklistItem| i.estimate_min.unwrap_or(avg_estimate).max(1) as u64;
     // 手動なのに値が無い状態は「未設定」とみなし、やることがあれば自動計算に戻す
     let manual_value = meta.progress.map(|p| p.min(100));
-    let use_manual =
-        checklist_total == 0 || (meta.progress_mode == crate::model::ProgressMode::Manual
-            && manual_value.is_some());
+    let use_manual = checklist_total == 0
+        || (meta.progress_mode == crate::model::ProgressMode::Manual && manual_value.is_some());
     let progress = if use_manual {
         manual_value
     } else {
@@ -354,9 +362,21 @@ mod tests {
         let meta = TaskMeta {
             status: Status::Doing,
             checklist: vec![
-                ChecklistItem { text: "a".into(), done: true, estimate_min: Some(30) },
-                ChecklistItem { text: "b".into(), done: true, estimate_min: Some(120) },
-                ChecklistItem { text: "c".into(), done: false, estimate_min: Some(90) },
+                ChecklistItem {
+                    text: "a".into(),
+                    done: true,
+                    estimate_min: Some(30),
+                },
+                ChecklistItem {
+                    text: "b".into(),
+                    done: true,
+                    estimate_min: Some(120),
+                },
+                ChecklistItem {
+                    text: "c".into(),
+                    done: false,
+                    estimate_min: Some(90),
+                },
             ],
             ..Default::default()
         };
@@ -372,7 +392,11 @@ mod tests {
     fn manual_mode_overrides_checklist() {
         let dir = tempfile::tempdir().unwrap();
         let meta = TaskMeta {
-            checklist: vec![ChecklistItem { text: "a".into(), done: true, estimate_min: None }],
+            checklist: vec![ChecklistItem {
+                text: "a".into(),
+                done: true,
+                estimate_min: None,
+            }],
             progress: Some(30),
             progress_mode: ProgressMode::Manual,
             ..Default::default()
@@ -437,8 +461,16 @@ mod tests {
         // 手で編集された、または過去のバグで生まれた「手動なのに値が無い」状態
         let meta = TaskMeta {
             checklist: vec![
-                ChecklistItem { text: "a".into(), done: true, estimate_min: Some(60) },
-                ChecklistItem { text: "b".into(), done: false, estimate_min: Some(60) },
+                ChecklistItem {
+                    text: "a".into(),
+                    done: true,
+                    estimate_min: Some(60),
+                },
+                ChecklistItem {
+                    text: "b".into(),
+                    done: false,
+                    estimate_min: Some(60),
+                },
             ],
             progress: None,
             progress_mode: ProgressMode::Manual,

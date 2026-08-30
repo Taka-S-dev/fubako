@@ -7,8 +7,9 @@ use std::path::Path;
 /// これが無いと同じアイコンを何度も取り出すことになる。
 /// 取り出せなかった拡張子も None として覚え、毎回試し直さない
 #[cfg(windows)]
-static CACHE: std::sync::LazyLock<std::sync::Mutex<std::collections::HashMap<String, Option<String>>>> =
-    std::sync::LazyLock::new(Default::default);
+static CACHE: std::sync::LazyLock<
+    std::sync::Mutex<std::collections::HashMap<String, Option<String>>>,
+> = std::sync::LazyLock::new(Default::default);
 
 /// アイコンが中身に固有で、拡張子で共有できないもの
 #[cfg(windows)]
@@ -75,7 +76,11 @@ fn extract(path: &Path, is_dir: bool, per_file: bool, ext: &str) -> Option<Strin
         )
     } else {
         (
-            if ext.is_empty() { "x".into() } else { format!("x.{ext}") },
+            if ext.is_empty() {
+                "x".into()
+            } else {
+                format!("x.{ext}")
+            },
             FILE_ATTRIBUTE_NORMAL,
             SHGFI_ICON | SHGFI_LARGEICON | SHGFI_USEFILEATTRIBUTES,
         )

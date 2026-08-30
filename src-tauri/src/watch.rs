@@ -81,7 +81,11 @@ mod tests {
         let start = Instant::now();
         settle(&rx, QUIET_T, MAX_T);
         // 静止したのだから、上限まで待たずに戻る
-        assert!(start.elapsed() < MAX_T, "戻るのが遅すぎる: {:?}", start.elapsed());
+        assert!(
+            start.elapsed() < MAX_T,
+            "戻るのが遅すぎる: {:?}",
+            start.elapsed()
+        );
         drop(tx);
     }
 
@@ -113,6 +117,10 @@ mod tests {
         let start = Instant::now();
         settle(&rx, QUIET_T, MAX_T);
         // 送信側が閉じたら待つ意味がない（設定変更で watcher を作り直したとき）
-        assert!(start.elapsed() < MAX_T, "閉じても待っている: {:?}", start.elapsed());
+        assert!(
+            start.elapsed() < MAX_T,
+            "閉じても待っている: {:?}",
+            start.elapsed()
+        );
     }
 }

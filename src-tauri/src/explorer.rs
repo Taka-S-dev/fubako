@@ -116,7 +116,10 @@ mod tests {
 
     #[test]
     fn compares_paths_ignoring_prefix_and_case() {
-        assert_eq!(comparable(r"\\?\C:\Work\Task\"), comparable(r"c:\work\task"));
+        assert_eq!(
+            comparable(r"\\?\C:\Work\Task\"),
+            comparable(r"c:\work\task")
+        );
         assert_ne!(comparable(r"C:\work\a"), comparable(r"C:\work\b"));
     }
 }

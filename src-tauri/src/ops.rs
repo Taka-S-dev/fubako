@@ -57,7 +57,9 @@ fn move_dir(src: &Path, dest: &Path) -> Result<(), String> {
         Ok(()) => return Ok(()),
         // 別ボリュームのときだけコピーで移動する。ファイルを開いている等の理由で
         // 失敗したままコピーに進むと、削除できずフォルダが二重に残る
-        Err(e) if e.raw_os_error().is_some_and(|c| CROSS_VOLUME_ERRORS.contains(&c)) => {}
+        Err(e)
+            if e.raw_os_error()
+                .is_some_and(|c| CROSS_VOLUME_ERRORS.contains(&c)) => {}
         Err(e) => {
             return Err(format!(
                 "フォルダを移動できませんでした。中のファイルを開いていないか確認してください: {e}"
@@ -178,7 +180,9 @@ fn validate_roots(config: &AppConfig) -> Result<(), String> {
         }
         if let Some(w) = &work {
             if w.starts_with(d) {
-                return Err("作業ディレクトリをディープアーカイブ先の内側には置けません".to_string());
+                return Err(
+                    "作業ディレクトリをディープアーカイブ先の内側には置けません".to_string()
+                );
             }
         }
     }
@@ -192,7 +196,11 @@ pub fn apply_display_name(app: &AppHandle, config: &AppConfig) {
             let _ = window.set_title(name);
         }
         if let Some(tray) = app.tray_by_id("main-tray") {
-            let tip = if name.is_empty() { None } else { Some(name.as_str()) };
+            let tip = if name.is_empty() {
+                None
+            } else {
+                Some(name.as_str())
+            };
             let _ = tray.set_tooltip(tip);
         }
     }
@@ -330,7 +338,10 @@ pub async fn set_task_meta(
         .links
         .into_iter()
         .filter(|l| !l.url.trim().is_empty())
-        .map(|l| TaskLink { url: l.url.trim().to_string(), label: l.label.trim().to_string() })
+        .map(|l| TaskLink {
+            url: l.url.trim().to_string(),
+            label: l.label.trim().to_string(),
+        })
         .collect();
     // 保留の開始時刻はここで打つ。既に保留なら打ち直さず、いつからかを保つ
     meta.on_hold_since = match (patch.on_hold, meta.on_hold_since.take()) {
@@ -483,7 +494,9 @@ fn import_guard(src: &Path, config: &AppConfig) -> Result<(), String> {
         .iter()
         .filter_map(|r| r.as_ref())
     {
-        let Ok(r_c) = fs::canonicalize(r) else { continue };
+        let Ok(r_c) = fs::canonicalize(r) else {
+            continue;
+        };
         if src.starts_with(&r_c) {
             return Err("既に管理対象のフォルダです".to_string());
         }
@@ -497,7 +510,9 @@ fn import_guard(src: &Path, config: &AppConfig) -> Result<(), String> {
     .iter()
     .filter_map(|r| r.as_ref())
     {
-        let Ok(r_c) = fs::canonicalize(r) else { continue };
+        let Ok(r_c) = fs::canonicalize(r) else {
+            continue;
+        };
         if r_c.starts_with(src) {
             return Err("管理ルートを含むフォルダは取り込めません".to_string());
         }
@@ -514,7 +529,9 @@ pub async fn import_task(state: State<'_, AppState>, path: String) -> Result<Tas
     if !src.is_dir() {
         return Err(format!(
             "フォルダのみ取り込めます: {}",
-            src.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or(path)
+            src.file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or(path)
         ));
     }
     let root = work_root(&config)?;
@@ -625,7 +642,9 @@ pub fn looks_executable(url: &str) -> bool {
 #[tauri::command]
 pub async fn open_link(app: AppHandle, url: String, confirmed: bool) -> Result<(), String> {
     if !is_openable_link(&url) {
-        return Err("開けるのは http/https と、ドライブまたは共有フォルダのパスだけです".to_string());
+        return Err(
+            "開けるのは http/https と、ドライブまたは共有フォルダのパスだけです".to_string(),
+        );
     }
     if looks_executable(&url) && !confirmed {
         return Err("EXECUTABLE".to_string());
@@ -745,7 +764,10 @@ mod tests {
 
     #[test]
     fn sanitize_replaces_invalid_chars() {
-        assert_eq!(sanitize_name(r#"a\b/c:d*e?f"g<h>i|j"#), "a_b_c_d_e_f_g_h_i_j");
+        assert_eq!(
+            sanitize_name(r#"a\b/c:d*e?f"g<h>i|j"#),
+            "a_b_c_d_e_f_g_h_i_j"
+        );
         assert_eq!(sanitize_name("  調査  "), "調査");
     }
 
@@ -769,7 +791,10 @@ mod tests {
         move_dir(&src, &dest).unwrap();
         assert!(!src.exists());
         assert_eq!(fs::read_to_string(dest.join("a.txt")).unwrap(), "a");
-        assert_eq!(fs::read_to_string(dest.join("sub").join("b.txt")).unwrap(), "b");
+        assert_eq!(
+            fs::read_to_string(dest.join("sub").join("b.txt")).unwrap(),
+            "b"
+        );
     }
 
     #[test]
@@ -1086,7 +1111,10 @@ mod tests {
             .map(|e| e.file_name().to_string_lossy().to_string())
             .filter(|n| n.starts_with(".fubako-moving"))
             .collect();
-        assert!(leftovers.is_empty(), "temp folder left behind: {leftovers:?}");
+        assert!(
+            leftovers.is_empty(),
+            "temp folder left behind: {leftovers:?}"
+        );
     }
 
     #[cfg(windows)]
