@@ -54,6 +54,23 @@ Fubako は、作業ディレクトリ内のフォルダをタスクとして管�
 - **よく使う場所**: 一時置きや共有の資料置き場など、タスクに属さないフォルダをトップバーから開けます。作業ディレクトリとアーカイブは設定不要で常に一覧に出ます
 - **エクスプローラー連携**: タスクからワンクリックでフォルダを開く／パスをコピー。カードのダブルクリックでも開きます。同じフォルダのウィンドウが既にあれば、新しく開かずにそれを前面に出すので同じ窓が積み上がりません。カードとファイルは右クリックからも操作できます
 
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshot-dashboard.png" alt="ダッシュボード" /></td>
+    <td width="50%"><img src="docs/screenshot-dark.png" alt="ダークモードと詳細パネル" /></td>
+  </tr>
+  <tr>
+    <td align="center">放置・期限・整理候補が数で出るダッシュボード</td>
+    <td align="center">詳細パネル（やること・参照・保留）とダークモード</td>
+  </tr>
+</table>
+
+<p align="center">
+  <img src="docs/screenshot-compact.png" width="340" alt="付箋モード" /><br />
+  幅を詰めると、進行中だけを並べた付箋になる
+</p>
+
 ## インストール
 
 [最新のリリース](https://github.com/Taka-S-dev/fubako/releases/latest)から、どちらかをダウンロードしてください（[過去のリリース一覧](https://github.com/Taka-S-dev/fubako/releases)）。
