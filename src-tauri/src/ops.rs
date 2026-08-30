@@ -881,8 +881,8 @@ mod tests {
     #[test]
     fn programs_are_told_apart_from_documents() {
         for exe in [
-            r"C:	oolsiewer.exe",
-            r"\server\share\setup.MSI",
+            r"C:\tools\viewer.exe",
+            r"\\server\share\setup.MSI",
             "D:/scripts/run.ps1",
             r"C:\work\shortcut.lnk",
         ] {
@@ -890,8 +890,8 @@ mod tests {
         }
         for doc in [
             "https://example.com/download",
-            r"\server\share\仕様書.xlsx",
-            r"C:\work60802_調査",
+            r"\\server\share\仕様書.xlsx",
+            r"C:\work\20260802_調査",
             "D:/work/data/",
             r"C:\work\exe",
         ] {
