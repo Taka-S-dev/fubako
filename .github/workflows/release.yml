@@ -41,7 +41,8 @@ jobs:
           releaseBody: Windows installer built from ${{ github.sha }}.
           releaseDraft: true
 
-      # インストール不要で起動できる単体exe。WebView2 は Windows 10 20H2 以降に同梱
+      # インストール不要で起動できる単体exe。WebView2 ランタイムは同梱しないため、
+      # 入っていない環境では起動しない（その場合はインストーラー版を使う）
       - name: Stage portable executable
         run: |
           $exe = Get-ChildItem src-tauri/target/release -Filter *.exe -File |
