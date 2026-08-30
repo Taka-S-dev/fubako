@@ -15,6 +15,7 @@
 !/svelte.config.js
 !/vite.config.js
 !/tsconfig.json
+!/rust-toolchain.toml
 
 # ソース
 !/src/

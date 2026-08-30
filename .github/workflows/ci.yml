@@ -18,9 +18,10 @@ jobs:
           node-version: 22
           cache: npm
 
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy, rustfmt
+      # 使うコンパイラは rust-toolchain.toml が決める。
+      # ここでは何が選ばれたかをログに残すだけ
+      - name: Toolchain
+        run: rustup show active-toolchain && rustc --version
 
       - uses: Swatinem/rust-cache@v2
         with:
