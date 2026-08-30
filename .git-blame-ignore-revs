@@ -1,0 +1,7 @@
+# 整形だけで中身を変えていないコミット。blame の犯人にしない。
+# 手元で効かせるには一度だけ:
+#   git config blame.ignoreRevsFile .git-blame-ignore-revs
+# （GitHub の blame はこのファイルを自動で読む）
+
+# style: run rustfmt over the Rust sources
+6161b8b60da80ab524ebc20bbfa9f0f35e248320

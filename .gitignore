@@ -5,6 +5,7 @@
 # プロジェクト定義
 !/.gitignore
 !/.gitattributes
+!/.git-blame-ignore-revs
 !/.github/
 !/README.md
 !/LICENSE
