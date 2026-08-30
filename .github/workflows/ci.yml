@@ -20,7 +20,7 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
         with:
-          components: clippy
+          components: clippy, rustfmt
 
       - uses: Swatinem/rust-cache@v2
         with:
@@ -37,6 +37,10 @@ jobs:
       # tauri-build は frontendDist の存在を前提にするため cargo より先に実行する
       - name: Build frontend
         run: npm run build
+
+      - name: Format
+        working-directory: src-tauri
+        run: cargo fmt --check
 
       - name: Clippy
         working-directory: src-tauri
