@@ -180,6 +180,30 @@ npm run tauri build  # インストーラー作成 (src-tauri/target/release/bun
 
 進捗率は保存せず、やることと見積から表示のたびに導出します。保存されるのは事実（何が済んだか・見積は何分か）だけです。
 
+### `.todo.json`
+
+専用の形式ではなく、ただの JSON です。フォルダ名（`20260802_障害調査`）が日付と作業名を、
+置かれている場所が完了かどうかを表し、残りがこのファイルに入ります。全ての項目が省略可能で、
+無ければ既定値として読まれます。
+
+| キー | 型 | 内容 |
+|---|---|---|
+| `status` | `"backlog"` \| `"doing"` \| `"done"` | 進行状態。`done` はアーカイブ側に置かれている |
+| `tags` | `string[]` | タグ |
+| `due` | `string` | 期限（`YYYY-MM-DD`） |
+| `memo` | `string` | 補足 |
+| `checklist` | `{ text, done, estimate_min }[]` | やること。`estimate_min` は見積(分) |
+| `progress` | `number` | 手動入力の進捗率。`progress_mode` が `manual` のときだけ使う |
+| `progress_mode` | `"auto"` \| `"manual"` | `auto` はやることから毎回計算する |
+| `created_at` | `string` | 作成日時（RFC 3339） |
+| `completed_at` | `string` | 完了日時（RFC 3339） |
+| `on_hold_since` | `string` | 保留を始めた日時（RFC 3339）。無ければ保留していない |
+| `links` | `{ url, label }[]` | 参照 |
+
+このファイルを読めば、他の道具からタスクの一覧を作れます。Fubako 側に書き出し機能や
+連携機能は置いていません。形式が公開されていれば、それぞれの道具の側で好きな形に
+できるためです。
+
 ## ライセンス
 
 [MIT License](LICENSE) — Copyright (c) 2026 Taka-S-dev
