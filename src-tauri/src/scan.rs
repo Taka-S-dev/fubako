@@ -178,7 +178,13 @@ pub fn scan_task(dir: &Path, archived: bool, stale_days: u32) -> Option<Task> {
             })
     });
 
-    let status = if archived { Status::Done } else { meta.status };
+    // 完了かどうかはフォルダの位置で決まる。作業側にあるのに done なのは、
+    // 移動に失敗してメタだけが書き換わった痕跡なので、完了として扱わない
+    let status = match (archived, meta.status) {
+        (true, _) => Status::Done,
+        (false, Status::Done) => Status::Doing,
+        (false, other) => other,
+    };
 
     let checklist_total = meta.checklist.len();
     let checklist_done = meta.checklist.iter().filter(|i| i.done).count();
@@ -541,5 +547,30 @@ mod tests {
         let path = dir.path().join("data.json");
         atomic_write(&path, b"NEW").unwrap();
         assert_eq!(fs::read_to_string(&path).unwrap(), "NEW");
+    }
+    /// 移動に失敗すると、作業ディレクトリに残ったフォルダの `.todo.json` だけが
+    /// done になることがある。位置が真なので、完了として並べてはいけない
+    #[test]
+    fn a_folder_left_in_the_work_root_is_not_shown_as_done() {
+        let dir = tempfile::tempdir().unwrap();
+        let task = dir.path().join("20260802_調査");
+        fs::create_dir_all(&task).unwrap();
+        write_meta(
+            &task,
+            &TaskMeta {
+                status: Status::Done,
+                completed_at: Some("2026-08-02T10:00:00+09:00".into()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+
+        let scanned = scan_task(&task, false, 14).unwrap();
+        assert_eq!(scanned.status, Status::Doing);
+        assert!(!scanned.archived);
+
+        // アーカイブ側にあるなら、メタが何であれ完了
+        let archived = scan_task(&task, true, 14).unwrap();
+        assert_eq!(archived.status, Status::Done);
     }
 }

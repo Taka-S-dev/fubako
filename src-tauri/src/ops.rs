@@ -411,14 +411,18 @@ pub async fn rename_task(
 pub async fn complete_task(state: State<'_, AppState>, path: String) -> Result<String, String> {
     let config = state.config.lock().unwrap().clone();
     let src = ensure_managed(Path::new(&path), &config)?;
-    let archive = archive_root(&config)?;
+    let dest = complete(&src, &config)?;
+    Ok(dest.to_string_lossy().to_string())
+}
+
+/// 完了の本体はフォルダの移動で、メタはその記録にすぎない。
+/// だから移動が終わってから書く。先に書くと、移動に失敗したときフォルダは
+/// 作業ディレクトリに残ったまま `.todo.json` だけが done になり、
+/// 一覧では完了列へ移ったように見える
+fn complete(src: &Path, config: &AppConfig) -> Result<PathBuf, String> {
+    let archive = archive_root(config)?;
     let year_dir = archive.join(Local::now().format("%Y").to_string());
     fs::create_dir_all(&year_dir).map_err(|e| e.to_string())?;
-
-    let mut meta = scan::read_meta(&src);
-    meta.status = Status::Done;
-    meta.completed_at = Some(Local::now().to_rfc3339());
-    scan::write_meta(&src, &meta)?;
 
     let folder_name = src
         .file_name()
@@ -426,8 +430,13 @@ pub async fn complete_task(state: State<'_, AppState>, path: String) -> Result<S
         .to_string_lossy()
         .to_string();
     let dest = unique_dest(&year_dir, &folder_name);
-    move_dir(&src, &dest)?;
-    Ok(dest.to_string_lossy().to_string())
+    move_dir(src, &dest)?;
+
+    let mut meta = scan::read_meta(&dest);
+    meta.status = Status::Done;
+    meta.completed_at = Some(Local::now().to_rfc3339());
+    scan::write_meta(&dest, &meta)?;
+    Ok(dest)
 }
 
 #[tauri::command]
@@ -436,11 +445,6 @@ pub async fn reopen_task(state: State<'_, AppState>, path: String) -> Result<Str
     let src = ensure_managed(Path::new(&path), &config)?;
     let root = work_root(&config)?;
 
-    let mut meta = scan::read_meta(&src);
-    meta.status = Status::Doing;
-    meta.completed_at = None;
-    scan::write_meta(&src, &meta)?;
-
     let folder_name = src
         .file_name()
         .ok_or("フォルダ名を取得できません")?
@@ -448,6 +452,13 @@ pub async fn reopen_task(state: State<'_, AppState>, path: String) -> Result<Str
         .to_string();
     let dest = unique_dest(&root, &folder_name);
     move_dir(&src, &dest)?;
+
+    // 戻し終えてから記録を消す。先に消すと、移動に失敗したとき
+    // アーカイブに残ったフォルダから完了日だけが失われる
+    let mut meta = scan::read_meta(&dest);
+    meta.status = Status::Doing;
+    meta.completed_at = None;
+    scan::write_meta(&dest, &meta)?;
     Ok(dest.to_string_lossy().to_string())
 }
 
@@ -542,17 +553,17 @@ pub async fn import_task(state: State<'_, AppState>, path: String) -> Result<Tas
         .to_string_lossy()
         .to_string();
 
-    let mut meta = scan::read_meta(&src);
+    let dest = unique_dest(&root, &folder_name);
+    move_dir(&src, &dest)?;
+
+    let mut meta = scan::read_meta(&dest);
     meta.status = Status::Doing;
     // 退避したものを戻す場合は完了日が残っている。作業中なのに完了日を持つ状態にしない
     meta.completed_at = None;
     if meta.created_at.is_none() {
         meta.created_at = Some(Local::now().to_rfc3339());
     }
-    scan::write_meta(&src, &meta)?;
-
-    let dest = unique_dest(&root, &folder_name);
-    move_dir(&src, &dest)?;
+    scan::write_meta(&dest, &meta)?;
     scan::scan_task(&dest, false, config.stale_days)
         .ok_or_else(|| "取り込み結果の取得に失敗".to_string())
 }
@@ -1156,5 +1167,42 @@ mod tests {
 
         move_dir(&src, &dir.path().join("dest")).unwrap();
         assert_eq!(fs::read_to_string(stale.join("keep.txt")).unwrap(), "keep");
+    }
+    /// 報告された不具合の再現: 中のファイルを開いたまま完了させると移動に失敗する。
+    /// このとき `.todo.json` を先に書いていると、フォルダは作業側に残ったまま
+    /// 一覧だけが完了列へ移ってしまう
+    #[cfg(windows)]
+    #[test]
+    fn a_failed_completion_leaves_the_task_in_progress() {
+        let dir = tempfile::tempdir().unwrap();
+        let work = dir.path().join("work");
+        let archive = dir.path().join("archive");
+        let task = work.join("20260802_調査");
+        fs::create_dir_all(&task).unwrap();
+        fs::create_dir_all(&archive).unwrap();
+        scan::write_meta(
+            &task,
+            &TaskMeta {
+                status: Status::Doing,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        fs::write(task.join("open.txt"), "x").unwrap();
+        let _held = fs::File::open(task.join("open.txt")).unwrap();
+
+        let config = AppConfig {
+            work_root: Some(work.to_string_lossy().into()),
+            archive_root: Some(archive.to_string_lossy().into()),
+            ..Default::default()
+        };
+        let err = complete(&task, &config).unwrap_err();
+        assert!(err.contains("開いていないか"), "unexpected: {err}");
+
+        // フォルダは作業側に残り、状態も完了日も動いていない
+        assert!(task.exists());
+        let meta = scan::read_meta(&task);
+        assert_eq!(meta.status, Status::Doing);
+        assert!(meta.completed_at.is_none());
     }
 }
