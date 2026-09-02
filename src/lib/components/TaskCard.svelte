@@ -5,6 +5,7 @@
   let {
     task,
     selected = false,
+    marked = false,
     hint = null,
     onselect,
     onopen,
@@ -13,9 +14,11 @@
   }: {
     task: Task;
     selected?: boolean;
+    /** 一括操作の対象として選ばれている */
+    marked?: boolean;
     /** 検索の一致箇所。カードに出ていない場所で当たったときだけ入る */
     hint?: string | null;
-    onselect: (t: Task) => void;
+    onselect: (t: Task, e: MouseEvent) => void;
     onopen: (t: Task) => void;
     onpointerdown: (e: PointerEvent, t: Task) => void;
     oncontext: (e: MouseEvent, t: Task) => void;
@@ -32,8 +35,9 @@
   data-task={task.path}
   class:on-hold={task.on_hold_since}
   class:selected
+  class:marked
   onpointerdown={(e) => onpointerdown(e, task)}
-  onclick={() => onselect(task)}
+  onclick={(e) => onselect(task, e)}
   ondblclick={() => onopen(task)}
   oncontextmenu={(e) => oncontext(e, task)}
   title="{task.folder_name}&#10;ダブルクリックでエクスプローラーを開く"
@@ -144,6 +148,15 @@
   }
   .card.selected {
     border-color: var(--ink);
+  }
+  /* 一括操作の対象。詳細パネルの選択（枠が濃くなる）とは別の合図なので、
+     枠ではなく地の色で示し、両方が同時に付いても読み分けられるようにする */
+  .card.marked {
+    background: var(--manila-soft);
+    border-color: var(--manila-strong);
+  }
+  .card.marked::before {
+    border-color: var(--manila-strong);
   }
   .card.selected::before {
     border-color: var(--ink);

@@ -5,6 +5,7 @@
   let {
     tasks,
     selectedPath,
+    markedPaths,
     hints,
     state,
     onselect,
@@ -13,11 +14,13 @@
   }: {
     tasks: Task[];
     selectedPath: string | null;
+    /** 一括操作の対象として選ばれている行 */
+    markedPaths: Set<string>;
     /** 検索の一致箇所（一覧に出ていない場所で当たったものだけ） */
     hints: Map<string, string>;
     /** 表示条件は親が持つ。ビューを切り替えても選び直さずに済む */
     state: ListViewState;
-    onselect: (t: Task) => void;
+    onselect: (t: Task, e: MouseEvent) => void;
     onopen: (t: Task) => void;
     oncontext: (e: MouseEvent, t: Task) => void;
   } = $props();
@@ -123,7 +126,8 @@
           <tr
             data-task={t.path}
             class:selected={t.path === selectedPath}
-            onclick={() => onselect(t)}
+            class:marked={markedPaths.has(t.path)}
+            onclick={(e) => onselect(t, e)}
             ondblclick={() => onopen(t)}
             oncontextmenu={(e) => oncontext(e, t)}
           >
@@ -262,6 +266,11 @@
   }
   tbody tr.selected {
     background: var(--manila-soft);
+  }
+  /* 一括操作の対象。行では地の色が選択と同じになってしまうため、左端に帯を出す */
+  tbody tr.marked {
+    background: var(--manila-soft);
+    box-shadow: inset 3px 0 0 var(--manila-strong);
   }
   td {
     padding: 7px 12px;

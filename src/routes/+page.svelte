@@ -22,6 +22,7 @@
     ViewName,
   } from '$lib/types';
   import BoardView from '$lib/components/BoardView.svelte';
+  import BulkBar from '$lib/components/BulkBar.svelte';
   import DetailPanel from '$lib/components/DetailPanel.svelte';
   import ListView from '$lib/components/ListView.svelte';
   import CalendarView from '$lib/components/CalendarView.svelte';
@@ -53,6 +54,10 @@
   let loaded = $state(false);
   let query = $state('');
   let selectedPath = $state<string | null>(null);
+  /** 一括操作の対象。詳細パネルの選択とは別に持つので、片方を触っても他方は消えない */
+  let markedPaths = $state<string[]>([]);
+  /** Shift での範囲選択の起点 */
+  let markAnchor: string | null = null;
   const emptyListing: FolderListing = { entries: [], deeper_omitted: false, count_capped: false };
   let listing = $state<FolderListing>(emptyListing);
   let showCreate = $state(false);
@@ -105,6 +110,8 @@
   const compact = $derived(loaded && configured && windowWidth < COMPACT_WIDTH);
   const brandName = $derived(config?.display_name ?? 'Fubako');
   const selected = $derived(tasks.find((t) => t.path === selectedPath) ?? null);
+  const markedSet = $derived(new Set(markedPaths));
+  const markedTasks = $derived(tasks.filter((t) => markedSet.has(t.path)));
 
   const allTags = $derived(collectTags(tasks));
   const terms = $derived(parseTerms(query));
@@ -124,6 +131,11 @@
       tasks = await api.listTasks();
       if (selectedPath && !tasks.some((t) => t.path === selectedPath)) {
         selectedPath = null;
+      }
+      // 移動や削除で消えたものを選んだままにしない
+      const alive = new Set(tasks.map((t) => t.path));
+      if (markedPaths.some((p) => !alive.has(p))) {
+        markedPaths = markedPaths.filter((p) => alive.has(p));
       }
     } catch (e) {
       toast(String(e), 'error');
@@ -225,9 +237,48 @@
 
   // 選ぶだけ。同じカードで選択を外すと詳細パネルが開閉して幅が変わり、
   // ボードがガタつく。閉じるのは右上の × と Esc に任せる
-  function selectCard(t: Task) {
+  function selectCard(t: Task, e?: MouseEvent) {
     if (drag.suppressClick) return;
+    // Ctrl は1件ずつ足し引き、Shift は起点からの範囲。エクスプローラーと同じ作法
+    if (e?.ctrlKey || e?.metaKey) {
+      toggleMark(t.path);
+      markAnchor = t.path;
+      return;
+    }
+    if (e?.shiftKey && markAnchor) {
+      markRange(markAnchor, t.path);
+      return;
+    }
+    markedPaths = [];
+    markAnchor = t.path;
     selectedPath = t.path;
+  }
+
+  /** 画面に並んでいる順のパス。並び順はビューが決めるので DOM から読む */
+  function visiblePaths(): string[] {
+    return [...document.querySelectorAll<HTMLElement>('[data-task]')]
+      .map((el) => el.dataset.task)
+      .filter((p): p is string => !!p);
+  }
+
+  function toggleMark(path: string) {
+    markedPaths = markedPaths.includes(path)
+      ? markedPaths.filter((p) => p !== path)
+      : [...markedPaths, path];
+  }
+
+  function markRange(from: string, to: string) {
+    const paths = visiblePaths();
+    const a = paths.indexOf(from);
+    const b = paths.indexOf(to);
+    if (a < 0 || b < 0) return;
+    const range = paths.slice(Math.min(a, b), Math.max(a, b) + 1);
+    markedPaths = [...new Set([...markedPaths, ...range])];
+  }
+
+  function clearMarks() {
+    markedPaths = [];
+    markAnchor = null;
   }
 
   /** 完了列に入り切らないぶんは、絞り込み済みのリストで見せる */
@@ -242,7 +293,32 @@
     handleOpen(t);
   }
 
+  const statusLabels: Record<Status, string> = {
+    backlog: '未着手',
+    doing: '進行中',
+    done: '完了',
+  };
+
+  /** 印の付いたカードを掴んだら、印の付いた全件が動く。1枚だけ動くと取り残しに気づけない */
+  async function bulkDrop(status: Status) {
+    if (status === 'done') {
+      await bulkComplete();
+      return;
+    }
+    const targets = markedTasks.filter((t) => t.status !== status);
+    if (targets.length === 0) return;
+    await runBulk(`を${statusLabels[status]}にしました`, targets, async (t) => {
+      // アーカイブ側のものは、先に作業ディレクトリへ戻してから状態を変える
+      const path = t.archived ? await api.reopenTask(t.path) : t.path;
+      await api.setTaskMeta(path, patchOf(t, status));
+    });
+  }
+
   async function dropOn(task: Task, status: Status) {
+    if (markedSet.has(task.path) && markedPaths.length > 1) {
+      await bulkDrop(status);
+      return;
+    }
     if (task.status === status) return;
     try {
       if (status === 'done') {
@@ -310,6 +386,97 @@
       onHold: task.on_hold_since !== null,
       links: task.links,
     };
+  }
+
+  /**
+   * 一括操作。1件ずつ試し、失敗したものだけ選択に残す。
+   * 移動はファイルが開かれている等の理由で個別に失敗しうるので、
+   * 途中で止めず、最後に成否をまとめて伝えて再試行できる形にする
+   */
+  async function runBulk(clause: string, targets: Task[], fn: (t: Task) => Promise<unknown>) {
+    if (targets.length === 0) return;
+    let done = 0;
+    const failed: Task[] = [];
+    let firstError = '';
+    for (const t of targets) {
+      try {
+        await fn(t);
+        done++;
+      } catch (e) {
+        failed.push(t);
+        if (!firstError) firstError = `${t.name}: ${e}`;
+      }
+    }
+    await refresh();
+    markedPaths = failed.map((t) => t.path);
+    const more = failed.length > 1 ? ` ほか${failed.length - 1}件` : '';
+    if (failed.length === 0) {
+      toast(`${done} 件${clause}`);
+    } else if (done === 0) {
+      toast(`${failed.length} 件すべて失敗しました（${firstError}${more}）`, 'error');
+    } else {
+      toast(`${done} 件${clause}。${failed.length} 件が失敗しました（${firstError}${more}）`, 'error');
+    }
+  }
+
+  async function bulkComplete() {
+    const targets = markedTasks.filter((t) => !t.archived);
+    if (targets.length === 0) return;
+    const ok = await ask(`${targets.length} 件をフォルダごとアーカイブへ移動します。`, {
+      title: 'まとめて完了',
+      kind: 'warning',
+      okLabel: '移動する',
+      cancelLabel: 'キャンセル',
+    });
+    if (!ok) return;
+    await runBulk('をアーカイブへ移動しました', targets, (t) => api.completeTask(t.path));
+  }
+
+  async function bulkReopen() {
+    const targets = markedTasks.filter((t) => t.archived);
+    if (targets.length === 0) return;
+    const ok = await ask(`${targets.length} 件をフォルダごと作業ディレクトリへ戻します。`, {
+      title: 'まとめて作業に戻す',
+      kind: 'warning',
+      okLabel: '戻す',
+      cancelLabel: 'キャンセル',
+    });
+    if (!ok) return;
+    await runBulk('を作業ディレクトリへ移動しました', targets, (t) => api.reopenTask(t.path));
+  }
+
+  async function bulkDeepArchive() {
+    const targets = markedTasks.filter((t) => t.archived);
+    if (targets.length === 0) return;
+    const ok = await ask(
+      `${targets.length} 件をディープアーカイブへ移動します。\n移動後はアプリの表示・検索対象から外れます（フォルダをこのウィンドウにドロップすれば、作業として戻せます）。`,
+      {
+        title: 'ディープアーカイブ',
+        kind: 'warning',
+        okLabel: '移動する',
+        cancelLabel: 'キャンセル',
+      }
+    );
+    if (!ok) return;
+    await runBulk('をディープアーカイブへ移動しました', targets, (t) => api.deepArchiveTask(t.path));
+  }
+
+  async function bulkAddTag(tag: string) {
+    const targets = markedTasks.filter((t) => !t.tags.includes(tag));
+    if (targets.length === 0) {
+      toast(`「${tag}」は選択したすべてに付いています`);
+      return;
+    }
+    await runBulk(`に「${tag}」を付けました`, targets, (t) =>
+      api.setTaskMeta(t.path, { ...patchOf(t, t.status), tags: [...t.tags, tag] })
+    );
+  }
+
+  async function bulkRemoveTag(tag: string) {
+    const targets = markedTasks.filter((t) => t.tags.includes(tag));
+    await runBulk(`から「${tag}」を外しました`, targets, (t) =>
+      api.setTaskMeta(t.path, { ...patchOf(t, t.status), tags: t.tags.filter((x) => x !== tag) })
+    );
   }
 
   async function handleSaveMeta(task: Task, patch: MetaPatch) {
@@ -511,6 +678,8 @@
     if (e.key === 'Escape') {
       if (showCreate) showCreate = false;
       else if (showSettings) showSettings = false;
+      // 一括選択は Esc で捨てる。誤って掴んだまま操作するのを防ぐ
+      else if (markedPaths.length) clearMarks();
       // 絞り込み中はまず解除する（フィルタバーの案内と一致させる）
       else if (query) topBar?.clear();
       // 選択は解除せずにしまう。しまうために選択を捨てさせると、呼び戻した
@@ -549,6 +718,9 @@
     } else if (e.ctrlKey && e.key.toLowerCase() === 'n') {
       e.preventDefault();
       showCreate = true;
+    } else if (e.ctrlKey && e.key.toLowerCase() === 'a' && !inField) {
+      e.preventDefault();
+      markedPaths = visiblePaths();
     } else if (e.ctrlKey && e.key.toLowerCase() === 'f') {
       e.preventDefault();
       topBar?.focusSearch(true);
@@ -682,11 +854,23 @@
       onstart={finishOnboarding}
     />
   {:else}
+    {#if markedPaths.length}
+      <BulkBar
+        marked={markedTasks}
+        oncomplete={bulkComplete}
+        onreopen={bulkReopen}
+        ondeep={bulkDeepArchive}
+        onaddtag={bulkAddTag}
+        onremovetag={bulkRemoveTag}
+        onclear={clearMarks}
+      />
+    {/if}
     <div class="main">
       {#if view === 'list'}
         <ListView
           tasks={filtered}
           {selectedPath}
+          markedPaths={markedSet}
           {hints}
           state={listState}
           onselect={selectCard}
@@ -707,6 +891,7 @@
         <BoardView
           tasks={filtered}
           {selectedPath}
+          markedPaths={markedSet}
           {hints}
           dragOver={drag.over}
           dragging={drag.dragging}

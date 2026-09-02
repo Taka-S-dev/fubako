@@ -5,6 +5,7 @@
   let {
     tasks,
     selectedPath,
+    markedPaths,
     hints,
     dragOver,
     dragging,
@@ -17,6 +18,8 @@
   }: {
     tasks: Task[];
     selectedPath: string | null;
+    /** 一括操作の対象として選ばれているカード */
+    markedPaths: Set<string>;
     /** 検索の一致箇所（カードに出ていない場所で当たったものだけ） */
     hints: Map<string, string>;
     /** ドロップ先として光らせる列 */
@@ -24,7 +27,7 @@
     dragging: boolean;
     /** 絞り込み中は空の列の案内文を変える */
     filtering: boolean;
-    onselect: (t: Task) => void;
+    onselect: (t: Task, e: MouseEvent) => void;
     onopen: (t: Task) => void;
     /** 完了列に収まらなかったぶんをリストビューへ渡す */
     onshowdone: () => void;
@@ -81,6 +84,7 @@
           <TaskCard
             {task}
             selected={task.path === selectedPath}
+            marked={markedPaths.has(task.path)}
             hint={hints.get(task.path) ?? null}
             {onselect}
             {onopen}
