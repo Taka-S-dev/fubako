@@ -50,6 +50,13 @@ pub struct WindowState {
     pub maximized: bool,
 }
 
+/// 保存した絞り込み。クエリは検索欄に打つものと同じ文法
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SavedFilter {
+    pub name: String,
+    pub query: String,
+}
+
 /// 画面の地の明暗。Auto は OS の設定に従う
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
@@ -161,6 +168,10 @@ pub struct AppConfig {
     /// 作業ディレクトリとアーカイブは設定不要で常に開けるため、ここには入れない
     #[serde(default)]
     pub places: Vec<String>,
+    /// 名前を付けて保存した検索語。絞り込みの定義だけを持ち、
+    /// いま絞り込んでいるかどうかは持たない（起動のたびに全件表示へ戻す）
+    #[serde(default)]
+    pub saved_filters: Vec<SavedFilter>,
     #[serde(default)]
     pub theme: Theme,
     #[serde(default)]
@@ -201,6 +212,7 @@ impl Default for AppConfig {
             stale_days: default_stale_days(),
             template_files: default_templates(),
             places: Vec::new(),
+            saved_filters: Vec::new(),
             theme: Theme::default(),
             window: None,
             display_name: None,

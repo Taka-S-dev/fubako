@@ -98,6 +98,12 @@ export interface FolderListing {
   count_capped: boolean;
 }
 
+/** 保存した絞り込み。クエリは検索欄に打つものと同じ文法 */
+export interface SavedFilter {
+  name: string;
+  query: string;
+}
+
 export interface AppConfig {
   work_root: string | null;
   archive_root: string | null;
@@ -106,6 +112,8 @@ export interface AppConfig {
   template_files: string[];
   /** タスクに属さないが日常的に開く場所 */
   places: string[];
+  /** 名前を付けて保存した絞り込み。漏斗のメニューから選ぶと、検索欄とは別に一覧に効く */
+  saved_filters: SavedFilter[];
   theme: Theme;
   /** 前回のウィンドウの大きさと位置。アプリが書き、設定画面は触らない */
   window: {

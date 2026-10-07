@@ -32,8 +32,27 @@
   let staleDays = $state(initial.stale_days);
   let templatesText = $state(initial.template_files.join('\n'));
   let placesText = $state((initial.places ?? []).join('\n'));
+  // 「名前 = クエリ」を 1 行 1 つ。欄で直接並べ替え・削除できる
+  let filtersText = $state(
+    (initial.saved_filters ?? []).map((f) => `${f.name} = ${f.query}`).join('\n')
+  );
+
+  /** `名前 = クエリ` の行を読む。= が無い行と、どちらかが空の行は捨てる */
+  function parseFilters(text: string) {
+    const out: { name: string; query: string }[] = [];
+    for (const line of text.split('\n')) {
+      const at = line.search(/[=＝]/);
+      if (at < 0) continue;
+      const name = line.slice(0, at).trim();
+      const query = line.slice(at + 1).trim();
+      if (name && query) out.push({ name, query });
+    }
+    return out;
+  }
   let theme = $state<Theme>(initial.theme ?? 'auto');
   let auto = $state(initialAutostart);
+  // 絞り込みの書き方。普段は畳んでおき、知りたいときだけ開く
+  let showSyntax = $state(false);
 
   async function pick(target: 'work' | 'archive' | 'deep') {
     const dir = await openDialog({ directory: true, title: 'フォルダを選択' });
@@ -73,6 +92,7 @@
           .split('\n')
           .map((s) => s.trim())
           .filter(Boolean),
+        saved_filters: parseFilters(filtersText),
         theme,
       },
       auto
@@ -241,6 +261,36 @@
         作業ディレクトリとアーカイブは設定しなくても一覧に出ます
       </p>
     </div>
+    <div class="row">
+      <span class="label">絞り込み</span>
+      <div class="pick">
+        <textarea
+          class="field mono"
+          rows="3"
+          bind:value={filtersText}
+          placeholder={'調査だけ = #調査 -保留\n今週の発表 = #発表'}
+        ></textarea>
+      </div>
+      <p class="hint">
+        1行1つ、「名前 = 検索語」。トップバーの漏斗から選べます
+        <button class="syntax-toggle" onclick={() => (showSyntax = !showSyntax)} aria-expanded={showSyntax}>
+          書き方{showSyntax ? ' ▲' : ' ▼'}
+        </button>
+      </p>
+      {#if showSyntax}
+        <table class="syntax">
+          <tbody>
+            <tr><td class="mono">#調査</td><td>タグ「調査」が付いたもの</td></tr>
+            <tr><td class="mono">ライブラリ</td><td>その語を名前・補足・ファイル名などに含むもの</td></tr>
+            <tr><td class="mono">-test</td><td>その語を含むものを除く</td></tr>
+            <tr><td class="mono">-保留</td><td>保留中のものを除く</td></tr>
+          </tbody>
+        </table>
+        <p class="hint">
+          空白で区切ると全部を満たすものだけが残ります。例: <span class="mono">調査だけ = #調査 -保留</span>
+        </p>
+      {/if}
+    </div>
     <label class="auto">
       <input type="checkbox" bind:checked={auto} />
       Windows サインイン時に起動する（トレイに常駐）
@@ -329,6 +379,33 @@
     margin: 4px 0 0;
     font-size: 11px;
     color: var(--ink-3);
+  }
+  .syntax-toggle {
+    margin-left: 6px;
+    padding: 0 4px;
+    border: none;
+    background: none;
+    color: var(--ink-2);
+    font: inherit;
+    text-decoration: underline;
+    cursor: pointer;
+  }
+  .syntax-toggle:hover {
+    color: var(--ink);
+  }
+  .syntax {
+    margin-top: 6px;
+    border-collapse: collapse;
+    font-size: 11.5px;
+    color: var(--ink-2);
+  }
+  .syntax td {
+    padding: 2px 12px 2px 0;
+    vertical-align: top;
+  }
+  .syntax td.mono {
+    color: var(--ink);
+    white-space: nowrap;
   }
   .hk-row {
     display: flex;

@@ -14,6 +14,9 @@
     showFilterBar,
     oncreate,
     onplaces,
+    onfilters,
+    activeFilter,
+    filterHidden,
     onsettings,
     ontogglepin,
   }: {
@@ -29,6 +32,12 @@
     showFilterBar: boolean;
     oncreate: () => void;
     onplaces: (e: MouseEvent) => void;
+    /** 保存した絞り込みの一覧。中身は親が組み立てる */
+    onfilters: (e: MouseEvent) => void;
+    /** 漏斗で効いている絞り込みの名前。無ければ null */
+    activeFilter: string | null;
+    /** 漏斗で外れている件数 */
+    filterHidden: number;
     onsettings: () => void;
     ontogglepin: () => void;
   } = $props();
@@ -147,6 +156,32 @@
       </ul>
     {/if}
   </div>
+  <!-- 漏斗の絞り込みは検索とは別の層。効いている間は角に外した件数を小さく出すだけで、
+       帯は出さない。保存しないので、再起動すれば必ず全件に戻る -->
+  <button
+    class="btn gear funnel"
+    class:on={!!activeFilter}
+    onclick={onfilters}
+    disabled={!configured}
+    aria-pressed={!!activeFilter}
+    aria-label="絞り込みを選ぶ"
+    title={activeFilter ? `絞り込み: ${activeFilter}（${filterHidden} 件を除外）` : '絞り込みを選ぶ'}
+  >
+    {#if activeFilter}<span class="hidden-count" aria-hidden="true">{filterHidden}</span>{/if}
+    <svg
+      width="15"
+      height="15"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="1.8"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z" />
+    </svg>
+  </button>
   <div class="top-actions">
     <button class="btn primary" onclick={oncreate} disabled={!configured}> ＋ 新しい作業 </button>
     <button
@@ -409,6 +444,39 @@
   }
   .gear svg {
     display: block;
+  }
+  /* 検索欄の脇。主操作の列より一段軽く見せる */
+  .funnel {
+    flex: none;
+    border-color: transparent;
+    background: none;
+    color: var(--ink-3);
+  }
+  .funnel:hover {
+    color: var(--ink);
+    background: var(--surface-2);
+  }
+  .funnel {
+    position: relative;
+  }
+  .funnel.on {
+    color: var(--manila-ink);
+  }
+  /* 外した件数。目に入る程度で、読みに行けば分かる大きさ */
+  .hidden-count {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    min-width: 15px;
+    height: 15px;
+    padding: 0 4px;
+    border-radius: 8px;
+    background: var(--manila);
+    color: var(--on-solid);
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 15px;
+    text-align: center;
   }
   .gear.pinned {
     background: var(--manila-soft);

@@ -8,19 +8,7 @@
   import { CardDrag } from '$lib/dnd.svelte';
   import { collectTags, filterTasks, matchHint, parseTerms } from '$lib/search';
   import { SEPARATOR, wantsNativeMenu, type MenuItem, type OpenMenu } from '$lib/menu';
-  import type {
-    AppConfig,
-    CalendarViewState,
-    FolderEntry,
-    FolderListing,
-    ListViewState,
-    MetaPatch,
-    Status,
-    Task,
-    TaskLink,
-    Theme,
-    ViewName,
-  } from '$lib/types';
+  import type { AppConfig, CalendarViewState, FolderEntry, FolderListing, ListViewState, MetaPatch, SavedFilter, Status, Task, TaskLink, Theme, ViewName } from '$lib/types';
   import BoardView from '$lib/components/BoardView.svelte';
   import BulkBar from '$lib/components/BulkBar.svelte';
   import DetailPanel from '$lib/components/DetailPanel.svelte';
@@ -114,7 +102,18 @@
 
   const allTags = $derived(collectTags(tasks));
   const terms = $derived(parseTerms(query));
-  const filtered = $derived(filterTasks(tasks, terms));
+  /**
+   * 漏斗で選んだ絞り込み。検索欄とは別の層で、セッション中だけ効く。
+   * 保存しないので、次の起動では必ず全件に戻る（保留を忘れさせないため）
+   */
+  let activeFilter = $state<SavedFilter | null>(null);
+  const activeTerms = $derived(activeFilter ? parseTerms(activeFilter.query) : null);
+  /** 漏斗の絞り込みを先に掛け、その上に検索欄の語を重ねる */
+  const filtered = $derived(
+    filterTasks(activeTerms ? filterTasks(tasks, activeTerms) : tasks, terms)
+  );
+  /** 漏斗で外れている件数。バッジの説明に使う */
+  const filterHidden = $derived(activeTerms ? tasks.length - filterTasks(tasks, activeTerms).length : 0);
   // 一括操作は見えているものにだけ効く。絞り込みで外れたものを
   // 黙って動かすと、選んだ覚えのない変化になる
   const markedTasks = $derived(filtered.filter((t) => markedSet.has(t.path)));
@@ -546,6 +545,51 @@
     openMenu(e, items);
   }
 
+  /**
+   * 漏斗のメニュー。選んだ絞り込みは検索欄には入れず、一覧の層で効かせる。
+   * 効いているものには印を付け、もう一度選ぶと外れる。
+   * 「保留を非表示」は設定不要で最初からある
+   */
+  function filtersMenu(e: MouseEvent) {
+    const builtin: SavedFilter = { name: '保留を非表示', query: '-保留' };
+    const saved = (config?.saved_filters ?? []).filter((f) => f.name && f.query);
+    const entry = (f: SavedFilter): MenuItem => {
+      const on = activeFilter?.name === f.name && activeFilter?.query === f.query;
+      return { label: (on ? '✓ ' : '　') + f.name, action: () => (activeFilter = on ? null : f) };
+    };
+    const items: MenuItem[] = [entry(builtin)];
+    if (saved.length) {
+      items.push(SEPARATOR);
+      for (const f of saved) items.push(entry(f));
+    }
+    if (activeFilter) {
+      items.push(SEPARATOR, { label: '絞り込みを解除', action: () => (activeFilter = null) });
+    }
+    items.push(SEPARATOR);
+    // 検索欄で組んだ条件をそのまま取っておける。名前は後から設定で変えればよい
+    const q = query.trim();
+    if (q && !saved.some((f) => f.query === q)) {
+      items.push({ label: `いまの検索「${q}」を保存`, action: () => saveFilter(q) });
+    }
+    items.push({ label: '絞り込みを編集…', action: () => (showSettings = true) });
+    openMenu(e, items);
+  }
+
+  async function saveFilter(q: string) {
+    if (!config) return;
+    const next: AppConfig = {
+      ...config,
+      saved_filters: [...(config.saved_filters ?? []), { name: q, query: q }],
+    };
+    try {
+      await api.setConfig(next);
+      config = next;
+      toast(`「${q}」を絞り込みに追加しました（名前は設定で変えられます）`);
+    } catch (e) {
+      toast(String(e), 'error');
+    }
+  }
+
   // 場所を指すものなので、ファイル項目と同じ右クリックの作法に揃える
   function linkMenu(e: MouseEvent, link: TaskLink) {
     openMenu(e, [
@@ -842,6 +886,9 @@
       showFilterBar={loaded && configured}
       oncreate={() => (showCreate = true)}
       onplaces={placesMenu}
+      onfilters={filtersMenu}
+      activeFilter={activeFilter?.name ?? null}
+      {filterHidden}
       onsettings={() => (showSettings = true)}
       ontogglepin={togglePinned}
     />
