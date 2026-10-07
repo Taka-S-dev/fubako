@@ -277,43 +277,48 @@
     outline: 2px solid var(--focus);
     outline-offset: -1px;
   }
+  /* 絞り込み中は枠だけ色を付ける。地や太字まで変えると強すぎる */
   .search.filtering {
-    background: var(--manila-soft);
     border-color: var(--manila);
     color: var(--ink);
-    font-weight: 600;
   }
 
-  /* 絞り込み中であることと、解除方法を常に見える場所に出す */
+  /* 絞り込み中であることと、解除方法を常に見える場所に出す。
+     仕事の邪魔をしないよう、薄い地色で細く置く */
   .filter-bar {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
     flex: none;
-    padding: 7px 16px;
+    padding: 2px 16px;
     background: var(--manila-soft);
-    border-bottom: 1px solid var(--manila);
+    border-bottom: 1px solid var(--line);
+    color: var(--ink-2);
+    font-size: 11.5px;
+  }
+  .filter-bar svg {
     color: var(--manila-ink);
-    font-size: 12.5px;
   }
   .filter-term {
-    font-weight: 700;
+    font-weight: 600;
+    color: var(--manila-ink);
   }
   .filter-count {
     color: var(--ink-2);
   }
   .filter-clear {
     margin-left: auto;
-    border: 1px solid var(--manila);
-    background: var(--surface);
+    border: none;
+    background: none;
     color: var(--manila-ink);
     border-radius: 99px;
-    padding: 3px 12px;
-    font-size: 11.5px;
+    padding: 1px 8px;
+    font-size: 11px;
+    cursor: pointer;
   }
   .filter-clear:hover {
-    background: var(--manila);
-    color: var(--on-solid);
+    background: var(--surface);
+    color: var(--ink);
   }
   .clear {
     position: absolute;
