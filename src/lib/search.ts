@@ -1,9 +1,13 @@
 import type { Task } from './types';
 
-/** 検索語を「タグ限定」と「本文」に分けたもの */
+/** 検索語を「タグ限定」「本文」「除外」に分けたもの */
 export interface SearchTerms {
   tags: string[];
   text: string[];
+  /** `-語` で指定した、含んでいたら外す語 */
+  exclude: string[];
+  /** `-保留`。保留は本文に無い属性なので、語の除外とは別に持つ */
+  withoutHeld: boolean;
 }
 
 /** 半角の # と全角の ＃ はどちらもタグ限定として扱う */
@@ -11,45 +15,72 @@ function tagPart(token: string): string | null {
   return token.startsWith('#') || token.startsWith('＃') ? token.slice(1) : null;
 }
 
+/** 半角の - と全角の － はどちらも除外として扱う */
+function excludePart(token: string): string | null {
+  return token.startsWith('-') || token.startsWith('－') ? token.slice(1) : null;
+}
+
+/** 除外に使える属性の名前。本文の語ではなくタスクの状態を指す */
+const HELD = '保留';
+
 export function parseTerms(query: string): SearchTerms {
   const tags: string[] = [];
   const text: string[] = [];
+  const exclude: string[] = [];
+  let withoutHeld = false;
   for (const token of query.trim().split(/\s+/).filter(Boolean)) {
     const tag = tagPart(token);
-    if (tag === null) {
+    const ex = excludePart(token);
+    if (tag !== null) {
+      if (tag) tags.push(tag);
+    } else if (ex !== null) {
+      if (ex === HELD) withoutHeld = true;
+      else if (ex) exclude.push(ex);
+    } else {
       text.push(token);
-    } else if (tag) {
-      tags.push(tag);
     }
   }
-  return { tags, text };
+  return { tags, text, exclude, withoutHeld };
 }
 
 export function hasTerms(terms: SearchTerms): boolean {
-  return terms.tags.length > 0 || terms.text.length > 0;
+  return (
+    terms.tags.length > 0 || terms.text.length > 0 || terms.exclude.length > 0 || terms.withoutHeld
+  );
 }
 
-/** タグ条件はすべて満たし、本文の語もすべて含むものだけを残す */
+/** 検索の対象になる文字列。カードに出ていない場所も含む */
+function haystack(t: Task): string {
+  return [
+    t.folder_name,
+    t.name,
+    t.memo,
+    t.tags.join(' '),
+    t.date_prefix ?? '',
+    t.checklist.map((i) => i.text).join(' '),
+    t.links.map((l) => `${l.label} ${l.url}`).join(' '),
+    t.file_names.join(' '),
+  ]
+    .join(' ')
+    .toLowerCase();
+}
+
+/**
+ * タグ条件をすべて満たし、本文の語をすべて含み、除外の語を1つも含まず、
+ * `-保留` なら保留中でないものだけを残す
+ */
 export function filterTasks(tasks: Task[], terms: SearchTerms): Task[] {
   if (!hasTerms(terms)) return tasks;
   const tagQueries = terms.tags.map((t) => t.toLowerCase());
   const words = terms.text.map((t) => t.toLowerCase());
+  const banned = terms.exclude.map((t) => t.toLowerCase());
   return tasks.filter((t) => {
+    if (terms.withoutHeld && t.on_hold_since) return false;
     const taskTags = t.tags.map((tag) => tag.toLowerCase());
     if (!tagQueries.every((q) => taskTags.some((tag) => tag.includes(q)))) return false;
-    if (!words.length) return true;
-    const hay = [
-      t.folder_name,
-      t.name,
-      t.memo,
-      t.tags.join(' '),
-      t.date_prefix ?? '',
-      t.checklist.map((i) => i.text).join(' '),
-      t.links.map((l) => `${l.label} ${l.url}`).join(' '),
-      t.file_names.join(' '),
-    ]
-      .join(' ')
-      .toLowerCase();
+    if (!words.length && !banned.length) return true;
+    const hay = haystack(t);
+    if (banned.some((w) => hay.includes(w))) return false;
     return words.every((w) => hay.includes(w));
   });
 }
@@ -92,6 +123,8 @@ export function filterLabel(terms: SearchTerms): string {
   const parts: string[] = [];
   if (terms.tags.length) parts.push(`タグ「${terms.tags.join('」「')}」`);
   if (terms.text.length) parts.push(`「${terms.text.join(' ')}」`);
+  if (terms.exclude.length) parts.push(`「${terms.exclude.join(' ')}」を除く`);
+  if (terms.withoutHeld) parts.push('保留を除く');
   return `${parts.join(' かつ ')}で絞り込み中`;
 }
 

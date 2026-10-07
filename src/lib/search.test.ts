@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
   applyTagToQuery,
   collectTags,
+  filterLabel,
   filterTasks,
+  hasTerms,
   matchHint,
   parseTerms,
   tagSuggestions,
@@ -42,21 +44,21 @@ function task(over: Partial<Task>): Task {
 
 describe('parseTerms', () => {
   it('タグ限定と本文を分ける', () => {
-    expect(parseTerms('#調査 ライブラリ')).toEqual({ tags: ['調査'], text: ['ライブラリ'] });
+    expect(parseTerms('#調査 ライブラリ')).toEqual({ tags: ['調査'], text: ['ライブラリ'], exclude: [], withoutHeld: false });
   });
 
   it('全角の ＃ も半角と同じくタグとして扱う', () => {
     // 日本語入力のまま打つと全角になるため
-    expect(parseTerms('＃調査')).toEqual({ tags: ['調査'], text: [] });
+    expect(parseTerms('＃調査')).toEqual({ tags: ['調査'], text: [], exclude: [], withoutHeld: false });
   });
 
   it('空白の連続や前後の空白があっても語が増えない', () => {
-    expect(parseTerms('  調査   ライブラリ ')).toEqual({ tags: [], text: ['調査', 'ライブラリ'] });
+    expect(parseTerms('  調査   ライブラリ ')).toEqual({ tags: [], text: ['調査', 'ライブラリ'], exclude: [], withoutHeld: false });
   });
 
   it('# だけの入力はまだタグ名が無いので条件にしない', () => {
     // 打ち始めた瞬間に候補が全部消えないようにするため
-    expect(parseTerms('#')).toEqual({ tags: [], text: [] });
+    expect(parseTerms('#')).toEqual({ tags: [], text: [], exclude: [], withoutHeld: false });
   });
 });
 
@@ -168,5 +170,46 @@ describe('collectTags', () => {
       task({ tags: ['緊急'] }),
     ];
     expect(collectTags(tasks)).toEqual(['調査', '緊急', '執筆']);
+  });
+});
+
+describe('除外', () => {
+  it('-語 は本文のどこかにその語を含むものを外す', () => {
+    const tasks = [task({ name: '調査' }), task({ name: 'test', memo: 'ベンチ' })];
+    expect(filterTasks(tasks, parseTerms('-test')).map((t) => t.name)).toEqual(['調査']);
+    expect(filterTasks(tasks, parseTerms('-ベンチ')).map((t) => t.name)).toEqual(['調査']);
+  });
+
+  it('-保留 は語ではなく状態で外す', () => {
+    const tasks = [
+      task({ name: '待ち', on_hold_since: '2026-08-25T10:00:00+09:00' }),
+      task({ name: '進行' }),
+    ];
+    expect(filterTasks(tasks, parseTerms('-保留')).map((t) => t.name)).toEqual(['進行']);
+    // 「保留」という語を補足に持つだけのものは外さない
+    const memo = [task({ name: '相談', memo: '保留にするか検討' })];
+    expect(filterTasks(memo, parseTerms('-保留'))).toHaveLength(1);
+  });
+
+  it('全角の － も除外として読み、空の - は無視する', () => {
+    expect(parseTerms('－test').exclude).toEqual(['test']);
+    expect(parseTerms('-').exclude).toEqual([]);
+    expect(hasTerms(parseTerms('-'))).toBe(false);
+  });
+
+  it('タグ・本文・除外を組み合わせられる', () => {
+    const tasks = [
+      task({ name: 'A', tags: ['調査'] }),
+      task({ name: 'B', tags: ['調査'], on_hold_since: '2026-08-25T10:00:00+09:00' }),
+      task({ name: 'C', tags: ['発表'] }),
+    ];
+    expect(filterTasks(tasks, parseTerms('#調査 -保留')).map((t) => t.name)).toEqual(['A']);
+  });
+
+  it('絞り込みバーの文言に除外が出る', () => {
+    expect(filterLabel(parseTerms('-保留'))).toBe('保留を除くで絞り込み中');
+    expect(filterLabel(parseTerms('#調査 -test'))).toBe(
+      'タグ「調査」 かつ 「test」を除くで絞り込み中'
+    );
   });
 });
