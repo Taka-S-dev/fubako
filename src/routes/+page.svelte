@@ -111,11 +111,13 @@
   const brandName = $derived(config?.display_name ?? 'Fubako');
   const selected = $derived(tasks.find((t) => t.path === selectedPath) ?? null);
   const markedSet = $derived(new Set(markedPaths));
-  const markedTasks = $derived(tasks.filter((t) => markedSet.has(t.path)));
 
   const allTags = $derived(collectTags(tasks));
   const terms = $derived(parseTerms(query));
   const filtered = $derived(filterTasks(tasks, terms));
+  // 一括操作は見えているものにだけ効く。絞り込みで外れたものを
+  // 黙って動かすと、選んだ覚えのない変化になる
+  const markedTasks = $derived(filtered.filter((t) => markedSet.has(t.path)));
   // カードに出ていない場所で当たったものだけ、一致箇所を持つ
   const hints = $derived.by(() => {
     const map = new Map<string, string>();
