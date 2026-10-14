@@ -98,6 +98,12 @@ export interface FolderListing {
   count_capped: boolean;
 }
 
+/** ディープアーカイブを読んだ結果。上限で打ち切ったかどうかも持つ */
+export interface DeepArchiveListing {
+  tasks: Task[];
+  capped: boolean;
+}
+
 /** 保存した絞り込み。クエリは検索欄に打つものと同じ文法 */
 export interface SavedFilter {
   name: string;

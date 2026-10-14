@@ -1,5 +1,7 @@
 <script lang="ts">
   import TaskCard from './TaskCard.svelte';
+  import DeepSection from './DeepSection.svelte';
+  import type { DeepView } from '$lib/deep';
   import type { Status, Task } from '$lib/types';
 
   let {
@@ -15,6 +17,7 @@
     onshowdone,
     onpointerdown,
     oncontext,
+    deep = null,
   }: {
     tasks: Task[];
     selectedPath: string | null;
@@ -33,6 +36,8 @@
     onshowdone: () => void;
     onpointerdown: (e: PointerEvent, t: Task) => void;
     oncontext: (e: MouseEvent, t: Task) => void;
+    /** ディープアーカイブの検索結果。頼まれたときだけ完了列の末尾に出す */
+    deep?: DeepView | null;
   } = $props();
 
   const columnDefs: { status: Status; title: string; empty: string }[] = [
@@ -101,6 +106,10 @@
           <button class="more" onclick={onshowdone}>
             他 {hidden} 件をリストで見る
           </button>
+        {/if}
+        <!-- 表示上限は通常のアーカイブだけに掛ける。ディープは別の区切りで足す -->
+        {#if col.status === 'done' && deep}
+          <DeepSection {deep} />
         {/if}
       </div>
     </section>

@@ -143,6 +143,15 @@ pub struct FolderEntry {
     pub icon: Option<String>,
 }
 
+/// ディープアーカイブを読んだ結果。上限で打ち切った場合はその旨を伝え、
+/// 見つからなかったのが「無い」のか「読んでいない」のかを区別できるようにする
+#[derive(Debug, Clone, Serialize)]
+pub struct DeepArchiveListing {
+    pub tasks: Vec<Task>,
+    /// 件数の上限に達して打ち切った
+    pub capped: bool,
+}
+
 /// フォルダの中身の一覧。上限で打ち切った場合はその旨を伝え、
 /// 「これで全部」と誤解させないようにする
 #[derive(Debug, Clone, Serialize)]

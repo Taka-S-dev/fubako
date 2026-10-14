@@ -17,6 +17,9 @@
     onfilters,
     activeFilter,
     filterHidden,
+    deepAvailable,
+    deepShown,
+    ondeep,
     onsettings,
     ontogglepin,
   }: {
@@ -38,6 +41,12 @@
     activeFilter: string | null;
     /** 漏斗で外れている件数 */
     filterHidden: number;
+    /** ディープアーカイブ先が設定されている */
+    deepAvailable: boolean;
+    /** ディープアーカイブの結果を出している */
+    deepShown: boolean;
+    /** ディープアーカイブも探す */
+    ondeep: () => void;
     onsettings: () => void;
     ontogglepin: () => void;
   } = $props();
@@ -270,6 +279,10 @@
     </svg>
     <span class="filter-term">{filterLabel(terms)}</span>
     <span class="filter-count">{total} 件中 {shown} 件</span>
+    <!-- 普段は探さない場所。過去のものを思い出したいときだけ、ここから頼む -->
+    {#if deepAvailable && !deepShown}
+      <button class="filter-deep" onclick={ondeep}>ディープアーカイブも探す</button>
+    {/if}
     <button class="filter-clear" onclick={clear}>絞り込みを解除 (Esc)</button>
   </div>
 {/if}
@@ -340,6 +353,19 @@
   }
   .filter-count {
     color: var(--ink-2);
+  }
+  .filter-deep {
+    border: none;
+    background: none;
+    color: var(--ink-2);
+    font: inherit;
+    font-size: 11px;
+    text-decoration: underline;
+    padding: 1px 4px;
+    cursor: pointer;
+  }
+  .filter-deep:hover {
+    color: var(--ink);
   }
   .filter-clear {
     margin-left: auto;

@@ -1,6 +1,6 @@
 use crate::model::{
-    AppConfig, ChecklistItem, FolderEntry, FolderListing, ProgressMode, Status, Task, TaskLink,
-    TaskMeta,
+    AppConfig, ChecklistItem, DeepArchiveListing, FolderEntry, FolderListing, ProgressMode, Status,
+    Task, TaskLink, TaskMeta,
 };
 use crate::scan::{self, META_FILE};
 use crate::{config, watch, AppState};
@@ -144,11 +144,25 @@ fn archive_root(config: &AppConfig) -> Result<PathBuf, String> {
 /// 正規化済みパスを返す。canonicalize によって `..` やジャンクション・
 /// シンボリックリンクを解決した実体で判定するため、文字列偽装が効かない
 fn ensure_managed(path: &Path, config: &AppConfig) -> Result<PathBuf, String> {
+    ensure_within(path, &[&config.work_root, &config.archive_root])
+}
+
+/// 読むだけの操作（中身の一覧・ファイルを開く）に使う判定。ディープアーカイブは
+/// 管理の外なので書き換えは受け付けないが、過去の作業を思い出すために中を読むのは許す
+fn ensure_readable(path: &Path, config: &AppConfig) -> Result<PathBuf, String> {
+    ensure_within(
+        path,
+        &[
+            &config.work_root,
+            &config.archive_root,
+            &config.deep_archive_root,
+        ],
+    )
+}
+
+fn ensure_within(path: &Path, roots: &[&Option<String>]) -> Result<PathBuf, String> {
     let canon = fs::canonicalize(path).map_err(|_| "フォルダが見つかりません".to_string())?;
-    for root in [&config.work_root, &config.archive_root]
-        .iter()
-        .filter_map(|r| r.as_ref())
-    {
+    for root in roots.iter().filter_map(|r| r.as_ref()) {
         if let Ok(root_c) = fs::canonicalize(root) {
             if canon.starts_with(&root_c) && canon != root_c {
                 return Ok(canon);
@@ -252,6 +266,21 @@ pub async fn take_startup_warning(state: State<'_, AppState>) -> Result<Option<S
 pub async fn list_tasks(state: State<'_, AppState>) -> Result<Vec<Task>, String> {
     let config = state.config.lock().unwrap().clone();
     Ok(scan::scan_all(&config))
+}
+
+/// ディープアーカイブから読む件数の上限。何年分も溜まっても固まらないようにする
+const DEEP_SCAN_LIMIT: usize = 5000;
+
+/// ディープアーカイブの作業を読む。検索中に頼まれたときだけ呼ばれる。
+/// 照合は画面側の検索と同じ関数で行うので、ここでは一覧を返すだけにする
+#[tauri::command]
+pub async fn list_deep_archive(state: State<'_, AppState>) -> Result<DeepArchiveListing, String> {
+    let config = state.config.lock().unwrap().clone();
+    if config.deep_archive_root.is_none() {
+        return Err("ディープアーカイブ先が未設定です（設定画面で指定してください）".to_string());
+    }
+    let (tasks, capped) = scan::scan_deep(&config, DEEP_SCAN_LIMIT);
+    Ok(DeepArchiveListing { tasks, capped })
 }
 
 #[tauri::command]
@@ -590,7 +619,7 @@ pub async fn open_entry(
 ) -> Result<(), String> {
     let config = state.config.lock().unwrap().clone();
     let target = Path::new(&path);
-    ensure_managed(target, &config)?;
+    ensure_readable(target, &config)?;
     if target.is_dir() && crate::explorer::focus_existing_window(target) {
         return Ok(());
     }
@@ -750,7 +779,7 @@ pub async fn list_folder(
     path: String,
 ) -> Result<FolderListing, String> {
     let config = state.config.lock().unwrap().clone();
-    let dir = ensure_managed(Path::new(&path), &config)?;
+    let dir = ensure_readable(Path::new(&path), &config)?;
     Ok(build_listing(&dir))
 }
 
@@ -1204,5 +1233,33 @@ mod tests {
         let meta = scan::read_meta(&task);
         assert_eq!(meta.status, Status::Doing);
         assert!(meta.completed_at.is_none());
+    }
+    /// ディープアーカイブは読めるが書き換えられない。中を見るのは思い出すためで、
+    /// 直したければ作業に戻してから、という境界を固定する
+    #[test]
+    fn deep_archive_is_readable_but_not_writable() {
+        let dir = tempfile::tempdir().unwrap();
+        let work = dir.path().join("work");
+        let archive = dir.path().join("archive");
+        let deep = dir.path().join("deep");
+        let task = deep.join("2025").join("20250101_古い調査");
+        fs::create_dir_all(&work).unwrap();
+        fs::create_dir_all(&archive).unwrap();
+        fs::create_dir_all(&task).unwrap();
+        fs::write(task.join("メモ.md"), "結論").unwrap();
+        let config = AppConfig {
+            work_root: Some(work.to_string_lossy().into()),
+            archive_root: Some(archive.to_string_lossy().into()),
+            deep_archive_root: Some(deep.to_string_lossy().into()),
+            ..Default::default()
+        };
+
+        assert!(ensure_readable(&task, &config).is_ok());
+        assert!(ensure_readable(&task.join("メモ.md"), &config).is_ok());
+        // 書き換えに使う判定は通さない
+        assert!(ensure_managed(&task, &config).is_err());
+        // ルート自身と外は、読む側でも通さない
+        assert!(ensure_readable(&deep, &config).is_err());
+        assert!(ensure_readable(&dir.path().join("outside"), &config).is_err());
     }
 }

@@ -313,6 +313,37 @@ pub fn scan_all(config: &AppConfig) -> Vec<Task> {
     tasks
 }
 
+/// ディープアーカイブの作業を読む。普段の走査には入れず、検索中に
+/// 頼まれたときだけ呼ぶ（何年分も溜まる場所を毎回読ませないため）。
+/// 退避の仕組みが通常アーカイブの年フォルダをそのまま引き継ぐので、
+/// 年フォルダの中と、直下に置かれたものの両方を見る
+pub fn scan_deep(config: &AppConfig, limit: usize) -> (Vec<Task>, bool) {
+    let mut tasks = Vec::new();
+    let Some(root) = config.deep_archive_root.as_ref().map(PathBuf::from) else {
+        return (tasks, false);
+    };
+    for dir in subdirs(&root) {
+        let name = dir.file_name().map(|n| n.to_string_lossy().to_string());
+        let is_year_dir = name
+            .as_ref()
+            .is_some_and(|n| n.len() == 4 && n.chars().all(|c| c.is_ascii_digit()));
+        let candidates = if is_year_dir {
+            subdirs(&dir)
+        } else {
+            vec![dir]
+        };
+        for sub in candidates {
+            if tasks.len() >= limit {
+                return (tasks, true);
+            }
+            if let Some(t) = scan_task(&sub, true, config.stale_days) {
+                tasks.push(t);
+            }
+        }
+    }
+    (tasks, false)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -572,5 +603,48 @@ mod tests {
         // アーカイブ側にあるなら、メタが何であれ完了
         let archived = scan_task(&task, true, 14).unwrap();
         assert_eq!(archived.status, Status::Done);
+    }
+    #[test]
+    fn deep_archive_is_read_only_when_asked_and_respects_the_limit() {
+        let dir = tempfile::tempdir().unwrap();
+        let deep = dir.path().join("deep");
+        fs::create_dir_all(deep.join("2025").join("20250101_古い調査")).unwrap();
+        fs::create_dir_all(deep.join("2025").join("20250202_古い発表")).unwrap();
+        fs::create_dir_all(deep.join("20240303_直下の作業")).unwrap();
+        write_meta(
+            &deep.join("2025").join("20250101_古い調査"),
+            &TaskMeta {
+                status: Status::Done,
+                memo: "原因は設定".into(),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let config = AppConfig {
+            deep_archive_root: Some(deep.to_string_lossy().into()),
+            ..Default::default()
+        };
+
+        // 普段の走査には出てこない
+        assert!(scan_all(&config).is_empty());
+
+        // 頼まれれば、年フォルダの中も直下も読む。どれも完了扱い
+        let (tasks, capped) = scan_deep(&config, 100);
+        assert!(!capped);
+        let mut names: Vec<_> = tasks.iter().map(|t| t.name.clone()).collect();
+        names.sort();
+        assert_eq!(names, ["古い発表", "古い調査", "直下の作業"]);
+        assert!(tasks.iter().all(|t| t.archived && t.status == Status::Done));
+        // 補足もそのまま付いてくる（検索で当てるため）
+        assert!(tasks.iter().any(|t| t.memo == "原因は設定"));
+
+        // 上限で打ち切ったことを伝える
+        let (few, capped) = scan_deep(&config, 2);
+        assert_eq!(few.len(), 2);
+        assert!(capped);
+
+        // 設定されていなければ何も読まない
+        let (none, capped) = scan_deep(&AppConfig::default(), 100);
+        assert!(none.is_empty() && !capped);
     }
 }

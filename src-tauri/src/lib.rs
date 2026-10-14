@@ -78,6 +78,7 @@ pub fn run() {
             ops::reopen_task,
             ops::import_task,
             ops::deep_archive_task,
+            ops::list_deep_archive,
             ops::open_link,
             ops::take_startup_warning,
             ops::open_in_explorer,

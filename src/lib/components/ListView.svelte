@@ -1,6 +1,8 @@
 <script lang="ts">
   import type { ListSortKey, ListViewState, Status, Task } from '$lib/types';
   import { fmtDate, fmtPrefix, isOverdue, relativeDays } from '$lib/format';
+  import { matchHint } from '$lib/search';
+  import type { DeepView } from '$lib/deep';
 
   let {
     tasks,
@@ -11,6 +13,7 @@
     onselect,
     onopen,
     oncontext,
+    deep = null,
   }: {
     tasks: Task[];
     selectedPath: string | null;
@@ -23,6 +26,8 @@
     onselect: (t: Task, e: MouseEvent) => void;
     onopen: (t: Task) => void;
     oncontext: (e: MouseEvent, t: Task) => void;
+    /** ディープアーカイブの検索結果。頼まれたときだけ表の末尾に別の区切りで出す */
+    deep?: DeepView | null;
   } = $props();
 
   type SortKey = ListSortKey;
@@ -172,6 +177,46 @@
           <tr><td colspan="7" class="empty">該当する作業はありません</td></tr>
         {/each}
       </tbody>
+      {#if deep}
+        <!-- 並べ替えの対象にはしない。管理の外にあるので、開くか作業へ戻すかだけ -->
+        <tbody class="deep">
+          <tr class="deep-head">
+            <td colspan="7">
+              <span class="deep-title">ディープアーカイブ</span>
+              <span class="dim">
+                {#if deep.loading}探しています…{:else}{deep.tasks.length} 件{#if deep.capped}・上限で打ち切り（語を足して絞ってください）{/if}{/if}
+              </span>
+              <button class="deep-close" onclick={deep.onclose} aria-label="ディープアーカイブの結果を閉じる">✕</button>
+            </td>
+          </tr>
+          {#if !deep.loading}
+            {#each deep.tasks as t (t.path)}
+              {@const hint = matchHint(t, deep.terms)}
+              <tr
+                class="deep-row"
+                class:selected={deep.selectedPath === t.path}
+                title={t.path}
+                onclick={() => deep.onselect(t)}
+              >
+                <td class="dim">ディープ</td>
+                <td class="mono dim">{fmtPrefix(t.date_prefix) ?? '—'}</td>
+                <td class="name-cell">
+                  <span class="name">{t.name}</span>
+                  {#if hint}<span class="hint">{hint} に一致</span>{/if}
+                </td>
+                <td colspan="2"></td>
+                <td class="dim">完了 {fmtDate(t.completed_at)}</td>
+                <td class="deep-acts">
+                  <button onclick={(e) => { e.stopPropagation(); deep.onopen(t); }}>開く</button>
+                  <button onclick={(e) => { e.stopPropagation(); deep.onrestore(t); }}>作業に戻す</button>
+                </td>
+              </tr>
+            {:else}
+              <tr><td colspan="7" class="empty">一致する作業はありません</td></tr>
+            {/each}
+          {/if}
+        </tbody>
+      {/if}
     </table>
   </div>
 </div>
@@ -275,6 +320,54 @@
   td {
     padding: 7px 12px;
     white-space: nowrap;
+  }
+  /* ディープアーカイブの区切り。普段の行より沈めて、触れない行だと分かるようにする */
+  tbody.deep tr.deep-head {
+    cursor: default;
+  }
+  tbody.deep tr.deep-row.selected {
+    box-shadow: inset 3px 0 0 var(--ink-3);
+  }
+  .deep-head td {
+    padding-top: 12px;
+    border-top: 1px dashed var(--line-strong);
+    font-size: 11.5px;
+  }
+  .deep-title {
+    margin-right: 8px;
+    font-weight: 600;
+    color: var(--ink-2);
+  }
+  .deep-close {
+    float: right;
+    border: none;
+    background: none;
+    color: var(--ink-3);
+    cursor: pointer;
+  }
+  .deep-close:hover {
+    color: var(--ink);
+  }
+  .deep-row {
+    background: var(--surface-sunk);
+    color: var(--ink-2);
+  }
+  .deep-acts {
+    text-align: right;
+  }
+  .deep-acts button {
+    border: none;
+    background: none;
+    color: var(--ink-2);
+    font: inherit;
+    font-size: 11.5px;
+    padding: 1px 6px;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  .deep-acts button:hover {
+    background: var(--surface-2);
+    color: var(--ink);
   }
   .name-cell {
     font-weight: 600;

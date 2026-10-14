@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
-import type { AppConfig, FolderListing, MetaPatch, Task } from './types';
+import type { AppConfig, DeepArchiveListing, FolderListing, MetaPatch, Task } from './types';
 
 export const api = {
   getConfig: () => invoke<AppConfig>('get_config'),
@@ -7,6 +7,8 @@ export const api = {
   setConfig: (config: AppConfig) => invoke<string | null>('set_config', { config }),
   takeStartupWarning: () => invoke<string | null>('take_startup_warning'),
   listTasks: () => invoke<Task[]>('list_tasks'),
+  /** 検索中に頼まれたときだけ呼ぶ。普段の一覧には入れない */
+  listDeepArchive: () => invoke<DeepArchiveListing>('list_deep_archive'),
   createTask: (name: string, useTemplate: boolean) =>
     invoke<Task>('create_task', { name, useTemplate }),
   setTaskMeta: (path: string, patch: MetaPatch) =>

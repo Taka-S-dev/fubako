@@ -6,11 +6,13 @@
   import { ask, open as openDialog } from '@tauri-apps/plugin-dialog';
   import { api } from '$lib/api';
   import { CardDrag } from '$lib/dnd.svelte';
-  import { collectTags, filterTasks, matchHint, parseTerms } from '$lib/search';
+  import { collectTags, filterTasks, hasTerms, matchHint, parseTerms } from '$lib/search';
   import { SEPARATOR, wantsNativeMenu, type MenuItem, type OpenMenu } from '$lib/menu';
-  import type { AppConfig, CalendarViewState, FolderEntry, FolderListing, ListViewState, MetaPatch, SavedFilter, Status, Task, TaskLink, Theme, ViewName } from '$lib/types';
+  import type { AppConfig, CalendarViewState, DeepArchiveListing, FolderEntry, FolderListing, ListViewState, MetaPatch, SavedFilter, Status, Task, TaskLink, Theme, ViewName } from '$lib/types';
   import BoardView from '$lib/components/BoardView.svelte';
   import BulkBar from '$lib/components/BulkBar.svelte';
+  import DeepDetail from '$lib/components/DeepDetail.svelte';
+  import type { DeepView } from '$lib/deep';
   import DetailPanel from '$lib/components/DetailPanel.svelte';
   import ListView from '$lib/components/ListView.svelte';
   import CalendarView from '$lib/components/CalendarView.svelte';
@@ -112,6 +114,43 @@
   const filtered = $derived(
     filterTasks(activeTerms ? filterTasks(tasks, activeTerms) : tasks, terms)
   );
+  /**
+   * ディープアーカイブの検索。頼まれたときだけ読み、開いている間は使い回す。
+   * 検索欄を空にすると閉じ、次に探すときは読み直す
+   */
+  let deepOpen = $state(false);
+  let deepLoading = $state(false);
+  let deepList = $state<DeepArchiveListing | null>(null);
+  /** 右のペインに出しているディープアーカイブの作業。普段の選択とは同時に持たない */
+  let deepSelectedPath = $state<string | null>(null);
+  /** ボードとリストへ渡す形。検索語が無いとき・ほかのビューでは出さない */
+  const deep = $derived<DeepView | null>(
+    deepOpen && hasTerms(terms) && (view === 'board' || view === 'list')
+      ? {
+          tasks: deepList ? filterTasks(deepList.tasks, terms) : [],
+          loading: deepLoading,
+          capped: deepList?.capped ?? false,
+          terms,
+          selectedPath: deepSelectedPath,
+          onselect: (t: Task) => {
+            deepSelectedPath = t.path;
+            selectedPath = null;
+          },
+          onopen: openDeep,
+          onrestore: restoreDeep,
+          onclose: () => (deepOpen = false),
+        }
+      : null
+  );
+  $effect(() => {
+    if (!hasTerms(terms)) deepOpen = false;
+  });
+
+  /** 結果を閉じたり別のビューへ移ったりすれば、ペインも一緒に消える */
+  const deepSelected = $derived(
+    deep ? (deepList?.tasks.find((t) => t.path === deepSelectedPath) ?? null) : null
+  );
+
   /** 漏斗で外れている件数。バッジの説明に使う */
   const filterHidden = $derived(activeTerms ? tasks.length - filterTasks(tasks, activeTerms).length : 0);
   // 一括操作は見えているものにだけ効く。絞り込みで外れたものを
@@ -160,7 +199,7 @@
 
   // 選択タスクの中身プレビューを読み込む
   $effect(() => {
-    const path = selected?.path;
+    const path = selected?.path ?? deepSelected?.path;
     if (!path) {
       listing = emptyListing;
       return;
@@ -168,7 +207,7 @@
     api
       .listFolder(path)
       .then((result) => {
-        if (selected?.path === path) listing = result;
+        if ((selected?.path ?? deepSelected?.path) === path) listing = result;
       })
       .catch(() => (listing = emptyListing));
   });
@@ -253,6 +292,7 @@
     markedPaths = [];
     markAnchor = t.path;
     selectedPath = t.path;
+    deepSelectedPath = null;
   }
 
   /** 画面に並んでいる順のパス。並び順はビューが決めるので DOM から読む */
@@ -575,6 +615,48 @@
     openMenu(e, items);
   }
 
+  async function searchDeep() {
+    deepOpen = true;
+    deepLoading = true;
+    try {
+      deepList = await api.listDeepArchive();
+    } catch (e) {
+      deepOpen = false;
+      toast(String(e), 'error');
+    } finally {
+      deepLoading = false;
+    }
+  }
+
+  async function openDeep(t: Task) {
+    try {
+      await api.openInExplorer(t.path);
+    } catch (e) {
+      toast(String(e), 'error');
+    }
+  }
+
+  /** ドロップで戻すのと同じ処理を、結果の行から呼ぶ */
+  async function restoreDeep(t: Task) {
+    const ok = await ask(`「${t.name}」をフォルダごと作業ディレクトリへ戻します。`, {
+      title: '作業に戻す',
+      kind: 'info',
+      okLabel: '戻す',
+      cancelLabel: 'キャンセル',
+    });
+    if (!ok) return;
+    try {
+      const back = await api.importTask(t.path);
+      if (deepList) deepList = { ...deepList, tasks: deepList.tasks.filter((x) => x.path !== t.path) };
+      deepSelectedPath = null;
+      await refresh();
+      selectedPath = back.path;
+      toast(`「${t.name}」を作業に戻しました`);
+    } catch (e) {
+      toast(String(e), 'error');
+    }
+  }
+
   async function saveFilter(q: string) {
     if (!config) return;
     const next: AppConfig = {
@@ -889,6 +971,9 @@
       onfilters={filtersMenu}
       activeFilter={activeFilter?.name ?? null}
       {filterHidden}
+      deepAvailable={!!config?.deep_archive_root && (view === 'board' || view === 'list')}
+      deepShown={deepOpen}
+      ondeep={searchDeep}
       onsettings={() => (showSettings = true)}
       ontogglepin={togglePinned}
     />
@@ -925,6 +1010,7 @@
           onselect={selectCard}
           onopen={openCard}
           oncontext={taskMenu}
+          {deep}
         />
       {:else if view === 'cal'}
         <CalendarView tasks={filtered} {selectedPath} state={calState} onselect={selectCard} />
@@ -950,6 +1036,7 @@
           onshowdone={showDoneInList}
           onpointerdown={drag.start}
           oncontext={taskMenu}
+          {deep}
         />
       {/if}
 
@@ -969,6 +1056,17 @@
           onopenlink={handleOpenLink}
           onlinkcontext={linkMenu}
           onentrycontext={entryMenu}
+        />
+      {:else if deepSelected}
+        <DeepDetail
+          task={deepSelected}
+          {listing}
+          onclose={() => (deepSelectedPath = null)}
+          onopen={openDeep}
+          oncopy={handleCopyPath}
+          onrestore={restoreDeep}
+          onopenentry={handleOpenEntry}
+          onopenlink={(url) => handleOpenLink(url)}
         />
       {/if}
     </div>
