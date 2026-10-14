@@ -21,6 +21,16 @@
     onopenentry: (t: Task, e: FolderEntry) => void;
     onopenlink: (url: string) => void;
   } = $props();
+
+  /** 補足の折り返しは詳細パネルと同じ設定に従う */
+  function memoWraps(): boolean {
+    try {
+      return localStorage.getItem('fubako.memoWrap') !== 'off';
+    } catch {
+      return true;
+    }
+  }
+  const wrap = memoWraps();
 </script>
 
 <!-- ディープアーカイブの作業を読むためのペイン。管理の外にあるので書き換えはさせない。
@@ -56,7 +66,7 @@
     {/if}
     <div class="row block">
       <span class="label">補足</span>
-      {#if task.memo}<p class="memo">{task.memo}</p>{:else}<span class="dim">—</span>{/if}
+      {#if task.memo}<p class="memo" class:nowrap={!wrap}>{task.memo}</p>{:else}<span class="dim">—</span>{/if}
     </div>
   </section>
 
@@ -182,6 +192,11 @@
     margin: 0;
     white-space: pre-wrap;
     color: var(--ink);
+  }
+  .memo.nowrap {
+    white-space: pre;
+    overflow-x: auto;
+    font-family: var(--mono);
   }
   .chips {
     display: flex;

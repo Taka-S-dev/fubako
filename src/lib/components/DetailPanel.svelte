@@ -1,4 +1,5 @@
 <script lang="ts">
+  import MemoEditor from './MemoEditor.svelte';
   import type {
     ChecklistItem,
     FolderEntry,
@@ -64,6 +65,29 @@
   let newLinkUrl = $state('');
   let newItemText = $state('');
 
+  /** 補足を広い画面で編集している */
+  let memoExpanded = $state(false);
+  /*
+   * 補足を折り返すかどうか。ログや表を貼るなら折り返さないほうが読める。
+   * この端末の見た目の好みなので、設定ファイルではなく WebView の保存領域に置く
+   */
+  const MEMO_WRAP_KEY = 'fubako.memoWrap';
+  function loadMemoWrap(): boolean {
+    try {
+      return localStorage.getItem(MEMO_WRAP_KEY) !== 'off';
+    } catch {
+      return true;
+    }
+  }
+  let memoWrap = $state(loadMemoWrap());
+  $effect(() => {
+    try {
+      localStorage.setItem(MEMO_WRAP_KEY, memoWrap ? 'on' : 'off');
+    } catch {
+      // 保存できなくても今の表示のまま使える
+    }
+  });
+
   $effect(() => {
     if (task.path !== currentPath) {
       currentPath = task.path;
@@ -72,6 +96,7 @@
       tagInput = '';
       due = task.due ?? '';
       memo = task.memo;
+      memoExpanded = false;
       checklist = task.checklist.map((i) => ({ ...i }));
       manualProgress = task.manual_progress;
       progressMode = task.progress_mode;
@@ -637,10 +662,57 @@
       <input class="field" type="date" bind:value={due} />
     </div>
     <div class="row memo-row">
-      <span class="label">補足</span>
-      <textarea class="field" rows="4" bind:value={memo} placeholder="作業名に書ききれない補足"
+      <!-- 広げるボタンは「補足」の見出しの下に置き、どの欄のものか読めるようにする -->
+      <div class="memo-label">
+        <span class="label">補足</span>
+        <button
+          class="expand"
+          onclick={() => (memoExpanded = true)}
+          title="大きく開いて編集"
+          aria-label="補足を大きく開いて編集"
+        >
+          <!-- 「広げる」と一目で分かる、四隅へ伸びる矢印（Lucide の expand）。線の太さは他のボタンとそろえる -->
+          <svg
+            width="13"
+            height="13"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <path d="m15 15 6 6" />
+            <path d="m15 9 6-6" />
+            <path d="M21 16v5h-5" />
+            <path d="M21 8V3h-5" />
+            <path d="M3 16v5h5" />
+            <path d="m3 21 6-6" />
+            <path d="M3 8V3h5" />
+            <path d="M9 9 3 3" />
+          </svg>
+        </button>
+      </div>
+      <textarea
+        class="field"
+        class:nowrap={!memoWrap}
+        rows="4"
+        wrap={memoWrap ? 'soft' : 'off'}
+        bind:value={memo}
+        placeholder="作業名に書ききれない補足"
       ></textarea>
     </div>
+    {#if memoExpanded}
+      <MemoEditor
+        bind:value={memo}
+        bind:wrap={memoWrap}
+        title={task.name}
+        {dirty}
+        onsave={save}
+        onclose={() => (memoExpanded = false)}
+      />
+    {/if}
     {#if dirty}
       <div class="save-row">
         <button class="btn primary" onclick={save}>変更を保存</button>
@@ -994,6 +1066,31 @@
   .memo-row {
     align-items: start;
   }
+  .memo-label {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+    padding-top: 8px;
+  }
+  .expand {
+    display: grid;
+    place-items: center;
+    width: 22px;
+    height: 22px;
+    margin-left: -4px;
+    padding: 0;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    background: none;
+    color: var(--ink-3);
+    cursor: pointer;
+  }
+  .expand:hover {
+    color: var(--ink);
+    background: var(--surface-2);
+    border-color: var(--line);
+  }
   /* タグは区切り記号を覚えずに済むよう、チップと候補で操作する */
   .tag-row {
     align-items: start;
@@ -1146,6 +1243,21 @@
   textarea.field {
     resize: vertical;
     line-height: 1.5;
+  }
+  /* 補足は書いた量に合わせて伸ばす。長くなったら欄の中でスクロールする。
+     field-sizing に対応していない環境では rows の高さのまま動く */
+  .memo-row textarea.field {
+    field-sizing: content;
+    min-height: calc(4lh + 16px);
+    max-height: 60vh;
+  }
+  /* 折り返さないときは横にスクロールし、桁がそろうよう等幅にする。
+     幅は欄に固定して、長い行で欄が横に広がらないようにする */
+  .memo-row textarea.field.nowrap {
+    width: 100%;
+    white-space: pre;
+    overflow-x: auto;
+    font-family: var(--mono);
   }
   .seg {
     display: inline-flex;
