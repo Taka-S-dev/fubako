@@ -105,6 +105,10 @@
 
 * {
   box-sizing: border-box;
+  /* スクロールバーは細く、矢印ボタンを出さない。つまみは区切り線と同じ色にして、
+     明暗どちらのテーマでも地に馴染ませる（Windows 標準の太い形は目に付きすぎる） */
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
 }
 
 html,
