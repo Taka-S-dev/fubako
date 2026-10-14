@@ -123,6 +123,60 @@
   let deepList = $state<DeepArchiveListing | null>(null);
   /** 右のペインに出しているディープアーカイブの作業。普段の選択とは同時に持たない */
   let deepSelectedPath = $state<string | null>(null);
+
+  /*
+   * 右のペインの幅。左端の仕切りをドラッグして変え、次回も同じ幅で開く。
+   * この端末の見た目の好みなので、設定ファイルではなく WebView の保存領域に置く
+   */
+  const PANEL_DEFAULT = 340;
+  const PANEL_MIN = 300;
+  /** ボード側に残す幅。ペインを広げすぎて一覧が潰れないように */
+  const BOARD_MIN = 360;
+  const PANEL_KEY = 'fubako.panelWidth';
+  function loadPanelWidth(): number {
+    try {
+      const n = Number(localStorage.getItem(PANEL_KEY));
+      return n >= PANEL_MIN ? n : PANEL_DEFAULT;
+    } catch {
+      return PANEL_DEFAULT;
+    }
+  }
+  let panelWidth = $state(loadPanelWidth());
+  let mainEl: HTMLDivElement | undefined = $state();
+  function clampPanel(w: number): number {
+    const max = Math.max(PANEL_MIN, (mainEl?.clientWidth ?? 1200) - BOARD_MIN);
+    return Math.round(Math.min(max, Math.max(PANEL_MIN, w)));
+  }
+  function savePanelWidth() {
+    try {
+      localStorage.setItem(PANEL_KEY, String(panelWidth));
+    } catch {
+      // 保存できなくても今の幅のまま使える
+    }
+  }
+  function startPanelResize(e: PointerEvent) {
+    if (!mainEl) return;
+    e.preventDefault();
+    const handle = e.currentTarget as HTMLElement;
+    handle.setPointerCapture(e.pointerId);
+    const right = mainEl.getBoundingClientRect().right;
+    const move = (ev: PointerEvent) => (panelWidth = clampPanel(right - ev.clientX));
+    const up = () => {
+      handle.removeEventListener('pointermove', move);
+      handle.removeEventListener('pointerup', up);
+      savePanelWidth();
+    };
+    handle.addEventListener('pointermove', move);
+    handle.addEventListener('pointerup', up);
+  }
+  /** キーボードでも幅を変えられるように。左で広く、右で狭く */
+  function panelResizeKey(e: KeyboardEvent) {
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+    e.preventDefault();
+    e.stopPropagation();
+    panelWidth = clampPanel(panelWidth + (e.key === 'ArrowLeft' ? 20 : -20));
+    savePanelWidth();
+  }
   /** ボードとリストへ渡す形。検索語が無いとき・ほかのビューでは出さない */
   const deep = $derived<DeepView | null>(
     deepOpen && hasTerms(terms) && (view === 'board' || view === 'list')
@@ -999,7 +1053,7 @@
         onclear={clearMarks}
       />
     {/if}
-    <div class="main">
+    <div class="main" bind:this={mainEl} style="--panel-width: {panelWidth}px">
       {#if view === 'list'}
         <ListView
           tasks={filtered}
@@ -1040,6 +1094,29 @@
         />
       {/if}
 
+      {#if selected || deepSelected}
+        <!-- ドラッグで幅を変え、ダブルクリックで元の幅に戻す。
+             フォーカスできる separator は WAI-ARIA のウィンドウ分割の作法で、操作できる部品として
+             扱われる。Svelte の検査は separator を一律に操作不可とみなすので、この 2 つだけ外す -->
+        <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
+        <div
+          class="splitter"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="詳細パネルの幅"
+          aria-valuenow={panelWidth}
+          aria-valuemin={PANEL_MIN}
+          aria-valuemax={clampPanel(Number.MAX_SAFE_INTEGER)}
+          tabindex="0"
+          title="ドラッグで幅を変更（ダブルクリックで元に戻す）"
+          onpointerdown={startPanelResize}
+          ondblclick={() => {
+            panelWidth = PANEL_DEFAULT;
+            savePanelWidth();
+          }}
+          onkeydown={panelResizeKey}
+        ></div>
+      {/if}
       {#if selected}
         <DetailPanel
           task={selected}
@@ -1128,6 +1205,21 @@
     flex: 1;
     display: flex;
     min-height: 0;
+  }
+  /* 詳細パネルの左端の仕切り。普段は見えず、触れたときだけ線が出る */
+  .splitter {
+    flex: none;
+    width: 6px;
+    margin-right: -3px;
+    position: relative;
+    z-index: 1;
+    cursor: col-resize;
+    touch-action: none;
+  }
+  .splitter:hover,
+  .splitter:focus-visible {
+    background: var(--line-strong);
+    outline: none;
   }
   .ghost {
     position: fixed;

@@ -873,7 +873,9 @@
 
 <style>
   .panel {
-    width: 340px;
+    /* 幅は親が持つ。左端の仕切りで変えられ、ボード側には最低限の幅を残す */
+    width: var(--panel-width, 340px);
+    max-width: calc(100% - 360px);
     flex: none;
     background: var(--surface);
     border-left: 1px solid var(--line);
