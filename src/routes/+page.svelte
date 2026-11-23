@@ -878,7 +878,8 @@
   function onKeydown(e: KeyboardEvent) {
     if (e.key === 'Escape') {
       if (showCreate) showCreate = false;
-      else if (showSettings) showSettings = false;
+      // 設定の画面は、保存していない変更を確かめてから自分で閉じる
+      else if (showSettings) return;
       // 一括選択は Esc で捨てる。誤って掴んだまま操作するのを防ぐ
       else if (markedPaths.length) clearMarks();
       // 絞り込み中はまず解除する（フィルタバーの案内と一致させる）

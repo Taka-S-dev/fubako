@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialog';
+  import { message, open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialog';
+  import { onMount } from 'svelte';
   import { accelFromEvent, formatAccel, isModifier } from '$lib/hotkey';
   import type { AppConfig, Theme } from '$lib/types';
 
@@ -85,33 +86,73 @@
     placesText = lines.join('\n');
   }
 
+  /** 画面の値から作った設定。保存するものと、変更があるかの比べ合わせの両方に使う */
+  function current(): AppConfig {
+    return {
+      // 隠し設定(display_name等)はUIに出さずそのまま引き継ぐ
+      ...initial,
+      work_root: workRoot || null,
+      archive_root: archiveRoot || null,
+      deep_archive_root: deepRoot || null,
+      deep_archive_months: Math.max(1, Number(deepMonths) || 6),
+      export_md: exportMd.trim() || null,
+      export_include_on_hold: exportOnHold,
+      accept_links: acceptLinks,
+      hotkey: hotkey.trim(),
+      stale_days: Math.max(1, Number(staleDays) || 14),
+      template_files: templatesText
+        .split('\n')
+        .map((s) => s.trim())
+        .filter(Boolean),
+      places: placesText
+        .split('\n')
+        .map((s) => s.trim())
+        .filter(Boolean),
+      saved_filters: parseFilters(filtersText),
+      theme,
+    };
+  }
+
+  // 開いた時点の値と比べて、保存していない変更があるかを見る。
+  // 保存するときと同じ形に直してから比べるので、空白の違いなど保存しても変わらないものは変更に数えない
+  const snapshot = () => JSON.stringify([current(), auto]);
+  // svelte-ignore state_referenced_locally
+  const baseline = snapshot();
+  const dirty = $derived(snapshot() !== baseline);
+  const canSave = $derived(!!workRoot && !!archiveRoot);
+
   function save() {
-    onsave(
-      {
-        // 隠し設定(display_name等)はUIに出さずそのまま引き継ぐ
-        ...initial,
-        work_root: workRoot || null,
-        archive_root: archiveRoot || null,
-        deep_archive_root: deepRoot || null,
-        deep_archive_months: Math.max(1, Number(deepMonths) || 6),
-        export_md: exportMd.trim() || null,
-        export_include_on_hold: exportOnHold,
-        accept_links: acceptLinks,
-        hotkey: hotkey.trim(),
-        stale_days: Math.max(1, Number(staleDays) || 14),
-        template_files: templatesText
-          .split('\n')
-          .map((s) => s.trim())
-          .filter(Boolean),
-        places: placesText
-          .split('\n')
-          .map((s) => s.trim())
-          .filter(Boolean),
-        saved_filters: parseFilters(filtersText),
-        theme,
-      },
-      auto
-    );
+    if (!canSave) return;
+    onsave(current(), auto);
+  }
+
+  /**
+   * 外側のクリックや Esc で閉じるとき、保存していない変更があれば保存するかを聞く。
+   * 聞かないと、うっかり閉じたときに変更が黙って消える。
+   * 「キャンセル」ボタンは保存しないと決めて押すものなので聞かない
+   */
+  const SAVE = '保存';
+  const DONT_SAVE = '保存しない';
+  let confirming = false;
+  async function requestClose() {
+    if (!dirty) {
+      onclose();
+      return;
+    }
+    if (confirming) return;
+    confirming = true;
+    try {
+      const answer = await message('設定の変更を保存しますか？', {
+        title: '設定',
+        buttons: { yes: SAVE, no: DONT_SAVE, cancel: 'キャンセル' },
+      });
+      // ボタンの文字で返る場合と Yes / No で返る場合がある。
+      // どちらでもないとき（× で閉じたなど）は、何も失わないよう設定の画面に残る
+      if (answer === 'Yes' || answer === SAVE) save();
+      else if (answer === 'No' || answer === DONT_SAVE) onclose();
+    } finally {
+      confirming = false;
+    }
   }
 
   // ホットキーは記法を覚えずに済むよう、実際に押した組み合わせを取り込む
@@ -150,198 +191,223 @@
   }
 
   function onkeydown(e: KeyboardEvent) {
-    // 記録中の Esc は記録の取り消しに使うので、設定は閉じない
-    if (e.key === 'Escape' && !recording) onclose();
+    // 記録中のキーはホットキーとして取り込むので、ここでは扱わない
+    if (recording) return;
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      requestClose();
+    } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+      e.preventDefault();
+      save();
+    }
   }
+
+  // 開いたらキー入力を設定の画面が受けるようにする（Esc と Ctrl+S をここで扱うため）
+  let modal: HTMLDivElement | undefined = $state();
+  onMount(() => modal?.focus());
 </script>
 
-<div class="overlay" onclick={onclose} onkeydown={onkeydown} role="presentation">
+<!-- 焦点が設定の画面の外にあるときのキーも受ける。画面の中のキーは下の modal が受けて外へ流さない -->
+<svelte:window {onkeydown} />
+
+<div class="overlay" onclick={requestClose} role="presentation">
   <div
     class="modal"
+    bind:this={modal}
     onclick={(e) => e.stopPropagation()}
-    onkeydown={(e) => e.stopPropagation()}
+    onkeydown={(e) => {
+      onkeydown(e);
+      e.stopPropagation();
+    }}
     role="dialog"
-    aria-label="設定"
+    aria-modal="true"
+    aria-labelledby="settings-title"
     tabindex="-1"
   >
-    <h2>設定</h2>
+    <h2 id="settings-title">設定</h2>
 
-    <div class="row">
-      <span class="label">作業ディレクトリ</span>
-      <div class="pick">
-        <input class="field mono" bind:value={workRoot} placeholder="C:\work" />
-        <button class="btn" onclick={() => pick('work')}>選択…</button>
+    <!-- 項目が増えてもボタンが隠れないよう、スクロールするのはこの中だけにする -->
+    <div class="body">
+      <div class="row">
+        <span class="label">作業ディレクトリ</span>
+        <div class="pick">
+          <input class="field mono" bind:value={workRoot} placeholder="C:\work" />
+          <button class="btn" onclick={() => pick('work')}>選択…</button>
+        </div>
       </div>
-    </div>
-    <div class="row">
-      <span class="label">アーカイブ先</span>
-      <div class="pick">
-        <input class="field mono" bind:value={archiveRoot} placeholder="C:\work\archive" />
-        <button class="btn" onclick={() => pick('archive')}>選択…</button>
+      <div class="row">
+        <span class="label">アーカイブ先</span>
+        <div class="pick">
+          <input class="field mono" bind:value={archiveRoot} placeholder="C:\work\archive" />
+          <button class="btn" onclick={() => pick('archive')}>選択…</button>
+        </div>
       </div>
-    </div>
-    <div class="row">
-      <span class="label">ディープアーカイブ先（任意）</span>
-      <div class="pick">
-        <input class="field mono" bind:value={deepRoot} placeholder="C:\work\deep_archive" />
-        <button class="btn" onclick={() => pick('deep')}>選択…</button>
-      </div>
-      <p class="hint">
-        古い完了タスクの退避先。ここはスキャン・検索の対象外になります（コールドストレージ）。
-        指定すると、完了したタスクを1件ずつ退避できるようになります
-      </p>
-    </div>
-    <div class="row">
-      <span class="label">ディープアーカイブへ移す目安</span>
-      <div class="pick months">
-        <span>完了から</span>
-        <input class="field days" type="number" min="1" bind:value={deepMonths} />
-        <span>か月で整理対象にする</span>
-      </div>
-    </div>
-    <div class="row">
-      <span class="label">期限の書き出し先（任意）</span>
-      <div class="pick">
-        <input class="field mono" bind:value={exportMd} placeholder="C:\Vault\Fubako の期限.md" />
-        <button class="btn" onclick={pickExport}>選択…</button>
-      </div>
-      <p class="hint">
-        期限つきで終わっていない作業を、Obsidian の Tasks プラグインの書き方で1つの md に書き出します。
-        Vault の中に置くと、Tasks の一覧や、ノートから期限を拾う道具に Fubako の期限が並びます。書き出しは一方通行で、
-        md を直しても Fubako には戻りません。Fubako が書いたファイルだけを上書きするので、
-        今あるノートは指定できません
-      </p>
-      <label class="auto">
-        <input type="checkbox" bind:checked={exportOnHold} />
-        保留中の作業も書き出す
-      </label>
-    </div>
-    <div class="row">
-      <span class="label">ほかのアプリからのリンク</span>
-      <label class="auto">
-        <input type="checkbox" bind:checked={acceptLinks} />
-        fubako:// のリンクを受け付ける
-      </label>
-      <p class="hint">
-        オンにすると、ほかのアプリやノートのリンクから、作業を選んで開いたり、検索欄に言葉を入れたりできます。
-        リンクでできるのは表示を変えることだけです。使わないならオフのままにしてください（オフの間はリンクの登録を消し、届いたリンクも受け取りません）
-      </p>
-    </div>
-    <div class="row">
-      <span class="label">呼び出しホットキー</span>
-      <div class="hk-row">
-        <button
-          class="field hk"
-          class:recording
-          onclick={startRecording}
-          onkeydown={onHotkeyKeydown}
-        >
-          {#if recording}
-            <span class="hk-prompt">キーを押してください…</span>
-          {:else if hotkey}
-            <span class="hk-keys">{formatAccel(hotkey)}</span>
-          {:else}
-            <span class="hk-prompt">未設定</span>
-          {/if}
-        </button>
-        <button class="btn" onclick={clearHotkey} disabled={!hotkey && !recording}>クリア</button>
-      </div>
-      <p class="hint">
-        {#if recording}
-          {#if rejected}
-            そのキーは使えません。Ctrl・Alt・Shift のいずれかと文字キーを組み合わせてください
-          {:else}
-            Esc で取り消し
-          {/if}
-        {:else}
-          枠をクリックしてから使いたいキーを押します。修飾キーとの組み合わせが必要です
-        {/if}
-      </p>
-    </div>
-    <div class="row">
-      <span class="label">外観</span>
-      <div class="seg" role="radiogroup" aria-label="外観">
-        {#each [['auto', '自動'], ['light', 'ライト'], ['dark', 'ダーク']] as [value, label] (value)}
-          <button
-            class="seg-btn"
-            class:active={theme === value}
-            onclick={() => {
-              theme = value as Theme;
-              onpreviewtheme(theme);
-            }}>{label}</button
-          >
-        {/each}
-      </div>
-      <p class="hint">自動は Windows の設定に従います</p>
-    </div>
-    <div class="row">
-      <span class="label">放置とみなす日数</span>
-      <input class="field days" type="number" min="1" bind:value={staleDays} />
-    </div>
-    <div class="row">
-      <span class="label">新規作成テンプレート</span>
-      <textarea
-        class="field mono"
-        rows="3"
-        bind:value={templatesText}
-        placeholder={'メモ.md\n資料/'}
-      ></textarea>
-      <p class="hint">1行1項目。末尾が / ならフォルダを作成</p>
-    </div>
-    <div class="row">
-      <span class="label">よく使う場所</span>
-      <div class="pick">
-        <textarea
-          class="field mono"
-          rows="3"
-          bind:value={placesText}
-          placeholder={'C:\\work\\一時置き\n\\\\server\\共有'}
-        ></textarea>
-        <button class="btn" onclick={addPlace}>追加…</button>
-      </div>
-      <p class="hint">
-        1行1つ。共有フォルダのパスは貼り付けても構いません。
-        作業ディレクトリとアーカイブは設定しなくても一覧に出ます
-      </p>
-    </div>
-    <div class="row">
-      <span class="label">絞り込み</span>
-      <div class="pick">
-        <textarea
-          class="field mono"
-          rows="3"
-          bind:value={filtersText}
-          placeholder={'調査だけ = #調査 -保留\n今週の発表 = #発表'}
-        ></textarea>
-      </div>
-      <p class="hint">
-        1行1つ、「名前 = 検索語」。トップバーの漏斗から選べます
-        <button class="syntax-toggle" onclick={() => (showSyntax = !showSyntax)} aria-expanded={showSyntax}>
-          書き方{showSyntax ? ' ▲' : ' ▼'}
-        </button>
-      </p>
-      {#if showSyntax}
-        <table class="syntax">
-          <tbody>
-            <tr><td class="mono">#調査</td><td>タグ「調査」が付いたもの</td></tr>
-            <tr><td class="mono">ライブラリ</td><td>その語を名前・補足・ファイル名などに含むもの</td></tr>
-            <tr><td class="mono">-test</td><td>その語を含むものを除く</td></tr>
-            <tr><td class="mono">-保留</td><td>保留中のものを除く</td></tr>
-          </tbody>
-        </table>
+      <div class="row">
+        <span class="label">ディープアーカイブ先（任意）</span>
+        <div class="pick">
+          <input class="field mono" bind:value={deepRoot} placeholder="C:\work\deep_archive" />
+          <button class="btn" onclick={() => pick('deep')}>選択…</button>
+        </div>
         <p class="hint">
-          空白で区切ると全部を満たすものだけが残ります。例: <span class="mono">調査だけ = #調査 -保留</span>
+          古い完了タスクの退避先。ここはスキャン・検索の対象外になります（コールドストレージ）。
+          指定すると、完了したタスクを1件ずつ退避できるようになります
         </p>
-      {/if}
+      </div>
+      <div class="row">
+        <span class="label">ディープアーカイブへ移す目安</span>
+        <div class="pick months">
+          <span>完了から</span>
+          <input class="field days" type="number" min="1" bind:value={deepMonths} />
+          <span>か月で整理対象にする</span>
+        </div>
+      </div>
+      <div class="row">
+        <span class="label">期限の書き出し先（任意）</span>
+        <div class="pick">
+          <input class="field mono" bind:value={exportMd} placeholder="C:\Vault\Fubako の期限.md" />
+          <button class="btn" onclick={pickExport}>選択…</button>
+        </div>
+        <p class="hint">
+          期限つきで終わっていない作業を、Obsidian の Tasks プラグインの書き方で1つの md に書き出します。
+          Vault の中に置くと、Tasks の一覧や、ノートから期限を拾う道具に Fubako の期限が並びます。書き出しは一方通行で、
+          md を直しても Fubako には戻りません。Fubako が書いたファイルだけを上書きするので、
+          今あるノートは指定できません
+        </p>
+        <label class="auto">
+          <input type="checkbox" bind:checked={exportOnHold} />
+          保留中の作業も書き出す
+        </label>
+      </div>
+      <div class="row">
+        <span class="label">ほかのアプリからのリンク</span>
+        <label class="auto">
+          <input type="checkbox" bind:checked={acceptLinks} />
+          fubako:// のリンクを受け付ける
+        </label>
+        <p class="hint">
+          オンにすると、ほかのアプリやノートのリンクから、作業を選んで開いたり、検索欄に言葉を入れたりできます。
+          リンクでできるのは表示を変えることだけです。使わないならオフのままにしてください（オフの間はリンクの登録を消し、届いたリンクも受け取りません）
+        </p>
+      </div>
+      <div class="row">
+        <span class="label">呼び出しホットキー</span>
+        <div class="hk-row">
+          <button
+            class="field hk"
+            class:recording
+            onclick={startRecording}
+            onkeydown={onHotkeyKeydown}
+          >
+            {#if recording}
+              <span class="hk-prompt">キーを押してください…</span>
+            {:else if hotkey}
+              <span class="hk-keys">{formatAccel(hotkey)}</span>
+            {:else}
+              <span class="hk-prompt">未設定</span>
+            {/if}
+          </button>
+          <button class="btn" onclick={clearHotkey} disabled={!hotkey && !recording}>クリア</button>
+        </div>
+        <p class="hint">
+          {#if recording}
+            {#if rejected}
+              そのキーは使えません。Ctrl・Alt・Shift のいずれかと文字キーを組み合わせてください
+            {:else}
+              Esc で取り消し
+            {/if}
+          {:else}
+            枠をクリックしてから使いたいキーを押します。修飾キーとの組み合わせが必要です
+          {/if}
+        </p>
+      </div>
+      <div class="row">
+        <span class="label">外観</span>
+        <div class="seg" role="radiogroup" aria-label="外観">
+          {#each [['auto', '自動'], ['light', 'ライト'], ['dark', 'ダーク']] as [value, label] (value)}
+            <button
+              class="seg-btn"
+              class:active={theme === value}
+              onclick={() => {
+                theme = value as Theme;
+                onpreviewtheme(theme);
+              }}>{label}</button
+            >
+          {/each}
+        </div>
+        <p class="hint">自動は Windows の設定に従います</p>
+      </div>
+      <div class="row">
+        <span class="label">放置とみなす日数</span>
+        <input class="field days" type="number" min="1" bind:value={staleDays} />
+      </div>
+      <div class="row">
+        <span class="label">新規作成テンプレート</span>
+        <textarea
+          class="field mono"
+          rows="3"
+          bind:value={templatesText}
+          placeholder={'メモ.md\n資料/'}
+        ></textarea>
+        <p class="hint">1行1項目。末尾が / ならフォルダを作成</p>
+      </div>
+      <div class="row">
+        <span class="label">よく使う場所</span>
+        <div class="pick">
+          <textarea
+            class="field mono"
+            rows="3"
+            bind:value={placesText}
+            placeholder={'C:\\work\\一時置き\n\\\\server\\共有'}
+          ></textarea>
+          <button class="btn" onclick={addPlace}>追加…</button>
+        </div>
+        <p class="hint">
+          1行1つ。共有フォルダのパスは貼り付けても構いません。
+          作業ディレクトリとアーカイブは設定しなくても一覧に出ます
+        </p>
+      </div>
+      <div class="row">
+        <span class="label">絞り込み</span>
+        <div class="pick">
+          <textarea
+            class="field mono"
+            rows="3"
+            bind:value={filtersText}
+            placeholder={'調査だけ = #調査 -保留\n今週の発表 = #発表'}
+          ></textarea>
+        </div>
+        <p class="hint">
+          1行1つ、「名前 = 検索語」。トップバーの漏斗から選べます
+          <button class="syntax-toggle" onclick={() => (showSyntax = !showSyntax)} aria-expanded={showSyntax}>
+            書き方{showSyntax ? ' ▲' : ' ▼'}
+          </button>
+        </p>
+        {#if showSyntax}
+          <table class="syntax">
+            <tbody>
+              <tr><td class="mono">#調査</td><td>タグ「調査」が付いたもの</td></tr>
+              <tr><td class="mono">ライブラリ</td><td>その語を名前・補足・ファイル名などに含むもの</td></tr>
+              <tr><td class="mono">-test</td><td>その語を含むものを除く</td></tr>
+              <tr><td class="mono">-保留</td><td>保留中のものを除く</td></tr>
+            </tbody>
+          </table>
+          <p class="hint">
+            空白で区切ると全部を満たすものだけが残ります。例: <span class="mono">調査だけ = #調査 -保留</span>
+          </p>
+        {/if}
+      </div>
+      <label class="auto">
+        <input type="checkbox" bind:checked={auto} />
+        Windows サインイン時に起動する（トレイに常駐）
+      </label>
     </div>
-    <label class="auto">
-      <input type="checkbox" bind:checked={auto} />
-      Windows サインイン時に起動する（トレイに常駐）
-    </label>
 
     <div class="buttons">
+      {#if dirty}
+        <span class="unsaved" role="status">保存していない変更があります</span>
+      {/if}
       <button class="btn" onclick={onclose}>キャンセル</button>
-      <button class="btn primary" onclick={save} disabled={!workRoot || !archiveRoot}>保存</button>
+      <button class="btn primary" onclick={save} disabled={!canSave} title="保存 (Ctrl+S)">保存</button>
     </div>
   </div>
 </div>
@@ -360,11 +426,24 @@
   .modal {
     width: 520px;
     max-height: 84vh;
-    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
     background: var(--surface);
     border-radius: 12px;
     box-shadow: var(--shadow-lift);
-    padding: 20px 22px 18px;
+    padding: 20px 0 0;
+  }
+  .modal:focus {
+    outline: none;
+  }
+  .modal > h2 {
+    padding: 0 22px;
+  }
+  .body {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 0 22px 4px;
   }
   h2 {
     margin: 0 0 14px;
@@ -483,7 +562,14 @@
   .buttons {
     display: flex;
     justify-content: flex-end;
+    align-items: center;
     gap: 8px;
-    margin-top: 14px;
+    padding: 12px 22px 16px;
+    border-top: 1px solid var(--line);
+  }
+  .unsaved {
+    margin-right: auto;
+    font-size: 12px;
+    color: var(--manila-ink);
   }
 </style>
