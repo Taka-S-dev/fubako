@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { open as openDialog } from '@tauri-apps/plugin-dialog';
+  import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialog';
   import { accelFromEvent, formatAccel, isModifier } from '$lib/hotkey';
   import type { AppConfig, Theme } from '$lib/types';
 
@@ -28,6 +28,8 @@
   let archiveRoot = $state(initial.archive_root ?? '');
   let deepRoot = $state(initial.deep_archive_root ?? '');
   let deepMonths = $state(initial.deep_archive_months);
+  let exportMd = $state(initial.export_md ?? '');
+  let exportOnHold = $state(initial.export_include_on_hold ?? true);
   let hotkey = $state(initial.hotkey);
   let staleDays = $state(initial.stale_days);
   let templatesText = $state(initial.template_files.join('\n'));
@@ -63,6 +65,15 @@
     }
   }
 
+  async function pickExport() {
+    const file = await saveDialog({
+      title: '期限の書き出し先',
+      defaultPath: exportMd || 'Fubako の期限.md',
+      filters: [{ name: 'Markdown', extensions: ['md'] }],
+    });
+    if (typeof file === 'string') exportMd = file;
+  }
+
   // 既存の行を保ったまま末尾へ足す。並べ替えと削除は欄で直接できる
   async function addPlace() {
     const dir = await openDialog({ directory: true, title: 'フォルダを選択' });
@@ -82,6 +93,8 @@
         archive_root: archiveRoot || null,
         deep_archive_root: deepRoot || null,
         deep_archive_months: Math.max(1, Number(deepMonths) || 6),
+        export_md: exportMd.trim() || null,
+        export_include_on_hold: exportOnHold,
         hotkey: hotkey.trim(),
         stale_days: Math.max(1, Number(staleDays) || 14),
         template_files: templatesText
@@ -183,6 +196,23 @@
         <input class="field days" type="number" min="1" bind:value={deepMonths} />
         <span>か月で整理対象にする</span>
       </div>
+    </div>
+    <div class="row">
+      <span class="label">期限の書き出し先（任意）</span>
+      <div class="pick">
+        <input class="field mono" bind:value={exportMd} placeholder="C:\Vault\Fubako の期限.md" />
+        <button class="btn" onclick={pickExport}>選択…</button>
+      </div>
+      <p class="hint">
+        期限つきで終わっていない作業を、Obsidian の Tasks プラグインの書き方で1つの md に書き出します。
+        Vault の中に置くと、Tasks の一覧や、ノートから期限を拾う道具に Fubako の期限が並びます。書き出しは一方通行で、
+        md を直しても Fubako には戻りません。Fubako が書いたファイルだけを上書きするので、
+        今あるノートは指定できません
+      </p>
+      <label class="auto">
+        <input type="checkbox" bind:checked={exportOnHold} />
+        保留中の作業も書き出す
+      </label>
     </div>
     <div class="row">
       <span class="label">呼び出しホットキー</span>

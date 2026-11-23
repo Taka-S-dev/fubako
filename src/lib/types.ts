@@ -142,4 +142,11 @@ export interface AppConfig {
   display_name: string | null;
   deep_archive_root: string | null;
   deep_archive_months: number;
+  /**
+   * 期限つきの作業を Tasks プラグインの書き方で書き出す md のパス。null なら書き出さない。
+   * 一方通行で、md を直しても Fubako には戻らない
+   */
+  export_md: string | null;
+  /** 保留中の作業も書き出すか */
+  export_include_on_hold: boolean;
 }

@@ -7,7 +7,7 @@ use crate::{config, watch, AppState};
 use chrono::Local;
 use std::fs;
 use std::path::{Path, PathBuf};
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_autostart::ManagerExt as _;
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
 use tauri_plugin_opener::OpenerExt as _;
@@ -349,12 +349,17 @@ pub async fn set_config(
     config: AppConfig,
 ) -> Result<Option<String>, String> {
     validate_roots(&config)?;
+    if let Some(raw) = config.export_md.as_deref().filter(|s| !s.trim().is_empty()) {
+        crate::export::check_target(raw, &config)?;
+    }
     config::save(&app, &config)?;
     apply_display_name(&app, &config);
     let warning = register_hotkey(&app, &config.hotkey)
         .err()
         .map(|e| format!("設定は保存しましたが、ホットキーを登録できませんでした: {e}"));
     *state.config.lock().unwrap() = config.clone();
+    // 書き出し先を直したら、前と同じ失敗でももう一度知らせる
+    *state.export_error.lock().unwrap() = None;
     watch::restart(&app, &config);
     Ok(warning)
 }
@@ -365,12 +370,22 @@ pub async fn take_startup_warning(state: State<'_, AppState>) -> Result<Option<S
     Ok(state.startup_warning.lock().unwrap().take())
 }
 
+/// 一覧を読む。作業が変わるたびに見張りから呼ばれるので、id を振るのと
+/// 期限の書き出しもここで行い、読んだ一覧をそのまま使い回す
 #[tauri::command]
-pub async fn list_tasks(state: State<'_, AppState>) -> Result<Vec<Task>, String> {
+pub async fn list_tasks(app: AppHandle, state: State<'_, AppState>) -> Result<Vec<Task>, String> {
     let config = state.config.lock().unwrap().clone();
     let mut tasks = scan::scan_all(&config);
     // ディープアーカイブは書き換えない境界なので、振るのは普段の一覧だけ
     crate::ids::reconcile(&mut tasks);
+
+    // 書き出せなくても一覧は返す。失敗は、変わったときだけ画面に知らせる
+    let error = crate::export::run(&config, &tasks).err();
+    let mut last = state.export_error.lock().unwrap();
+    if error.is_some() && *last != error {
+        let _ = app.emit("export-failed", error.clone());
+    }
+    *last = error;
     Ok(tasks)
 }
 

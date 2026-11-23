@@ -977,6 +977,8 @@
     prefersDark?.addEventListener('change', onSchemeChange);
     const unlisteners = [
       listen('tasks-changed', refresh),
+      // 一覧は出ているので止めずに知らせる。同じ失敗は、直るまで繰り返さない
+      listen<string>('export-failed', (e) => toast(`期限を書き出せませんでした: ${e.payload}`, 'error')),
       listen('focus-search', () => topBar?.focusSearch(true)),
       listen('quick-create', () => {
         if (configured) showCreate = true;

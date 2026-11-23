@@ -1,5 +1,6 @@
 mod config;
 mod explorer;
+mod export;
 mod icons;
 mod ids;
 mod model;
@@ -17,6 +18,8 @@ pub struct AppState {
     pub watcher: Mutex<watch::WatcherHandle>,
     /// 起動時に伝えられなかった不具合。画面が出てから一度だけ取り出す
     pub startup_warning: Mutex<Option<String>>,
+    /// 最後の期限の書き出しの失敗。同じ失敗を一覧を読み直すたびに知らせないため
+    pub export_error: Mutex<Option<String>>,
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -51,6 +54,7 @@ pub fn run() {
                 config: Mutex::new(cfg.clone()),
                 watcher: Mutex::new(None),
                 startup_warning: Mutex::new(warning),
+                export_error: Mutex::new(None),
             });
             watch::restart(app.handle(), &cfg);
             tray::setup(app)?;

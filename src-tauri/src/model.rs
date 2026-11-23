@@ -244,6 +244,17 @@ pub struct AppConfig {
     pub deep_archive_root: Option<String>,
     #[serde(default = "default_deep_archive_months")]
     pub deep_archive_months: u32,
+    /// 期限つきの作業を書き出す md のパス。None なら書き出さない。
+    /// Vault の中に置くと、Tasks プラグインやノートから期限を拾う道具が Fubako の期限も拾う
+    #[serde(default)]
+    pub export_md: Option<String>,
+    /// 保留中の作業も書き出すか。保留していても期限は来るので、既定は書き出す
+    #[serde(default = "default_true")]
+    pub export_include_on_hold: bool,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 fn default_deep_archive_months() -> u32 {
@@ -277,6 +288,8 @@ impl Default for AppConfig {
             display_name: None,
             deep_archive_root: None,
             deep_archive_months: default_deep_archive_months(),
+            export_md: None,
+            export_include_on_hold: true,
         }
     }
 }
