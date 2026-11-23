@@ -249,6 +249,33 @@
     } finally {
       loaded = true;
     }
+    // リンクで起動されたときは、読み込みが済んでから受け取る
+    await takeLink();
+  }
+
+  /**
+   * fubako:// のリンクで頼まれた表示の変更を受け取る。形は Rust 側で確かめ済みで、
+   * ここでできるのは作業を選ぶことと、検索欄に言葉を入れることだけ
+   */
+  async function takeLink() {
+    const pending = await api.takePendingLink().catch(() => null);
+    if (!pending) return;
+    if (pending.result === 'rejected') {
+      toast(`受け付けないリンクです（${pending.reason}）`, 'error');
+      return;
+    }
+    const command = pending.command;
+    if (command.kind === 'search') {
+      query = command.q;
+      return;
+    }
+    await refresh();
+    const task = tasks.find((t) => t.id === command.id);
+    if (task) {
+      selectedPath = task.path;
+    } else {
+      toast('リンクの作業が見つかりません。ディープアーカイブにある作業は、検索から探してください', 'error');
+    }
   }
 
   // 選択タスクの中身プレビューを読み込む
@@ -977,6 +1004,7 @@
     prefersDark?.addEventListener('change', onSchemeChange);
     const unlisteners = [
       listen('tasks-changed', refresh),
+      listen('link-opened', takeLink),
       // 一覧は出ているので止めずに知らせる。同じ失敗は、直るまで繰り返さない
       listen<string>('export-failed', (e) => toast(`期限を書き出せませんでした: ${e.payload}`, 'error')),
       listen('focus-search', () => topBar?.focusSearch(true)),

@@ -1,4 +1,5 @@
 mod config;
+mod deeplink;
 mod explorer;
 mod export;
 mod icons;
@@ -26,9 +27,14 @@ pub struct AppState {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
-            tray::show_main(app);
-        }))
+        // 2回目の起動は、開いている Fubako に引数を渡して終わる。引数が fubako:// の
+        // リンク1つだけならリンクとして扱い、それ以外の引数は使わずに窓を前に出す
+        .plugin(tauri_plugin_single_instance::init(
+            |app, argv, _cwd| match deeplink::link_from_args(argv) {
+                Some(link) => deeplink::deliver(app, &link),
+                None => tray::show_main(app),
+            },
+        ))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_autostart::init(
@@ -68,6 +74,13 @@ pub fn run() {
             if let Some(state) = cfg.window {
                 window::restore(&win, &state);
             }
+
+            app.manage(deeplink::PendingLink::default());
+            deeplink::sync_registration(cfg.accept_links);
+            // リンクで起動されたときは、そのリンクが起動の引数に入っている
+            if let Some(link) = deeplink::link_from_args(std::env::args()) {
+                deeplink::deliver(app.handle(), &link);
+            }
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -96,6 +109,7 @@ pub fn run() {
             ops::list_folder,
             ops::get_autostart,
             ops::set_autostart,
+            deeplink::take_pending_link,
         ])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")

@@ -29,9 +29,28 @@ fn clean_name(name: &str) -> String {
     kept.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
+/// 作業名を、Fubako でその作業を開くリンクにする。押すと Fubako が開いて詳細を出す。
+/// 名前に `[` `]` `\` が入っているとリンクの形が崩れるので、前に `\` を付けて文字として扱わせる。
+/// id が無い、またはリンクに使えない形なら、名前だけを書く
+fn linked_name(name: &str, id: Option<&str>) -> String {
+    let Some(id) = id.filter(|id| crate::deeplink::valid_id(id)) else {
+        return name.to_string();
+    };
+    let mut text = String::with_capacity(name.len());
+    for c in name.chars() {
+        if matches!(c, '[' | ']' | '\\') {
+            text.push('\\');
+        }
+        text.push(c);
+    }
+    format!("[{text}]({}://open?id={id})", crate::deeplink::SCHEME)
+}
+
 /// 書き出す中身を作る。期限があり、まだ終わっていない、作業側の作業だけを期限の順に並べる。
 /// 作業中は `[/]`、未着手は `[ ]`。どちらも Tasks プラグインの書き方では「終わっていない」と読まれる
-pub fn render(tasks: &[Task], include_on_hold: bool) -> String {
+/// `with_links` が真なら、作業名を Fubako でその作業を開くリンクにする。
+/// リンクを受け付ける設定が無効なら押しても開かないので、名前だけを書く
+pub fn render(tasks: &[Task], include_on_hold: bool, with_links: bool) -> String {
     let mut rows: Vec<(NaiveDate, String, &Task)> = tasks
         .iter()
         .filter(|t| !t.archived && t.status != Status::Done)
@@ -52,6 +71,11 @@ pub fn render(tasks: &[Task], include_on_hold: bool) -> String {
             "（保留中）"
         } else {
             ""
+        };
+        let name = if with_links {
+            linked_name(&name, t.id.as_deref())
+        } else {
+            name
         };
         out.push_str(&format!("- [{mark}] {name}{hold} 📅 {due}\n"));
     }
@@ -130,7 +154,8 @@ pub fn run(config: &AppConfig, tasks: &[Task]) -> Result<(), String> {
         return Ok(());
     };
     let target = check_target(raw, config)?;
-    write_if_changed(&target, &render(tasks, config.export_include_on_hold)).map(|_| ())
+    let content = render(tasks, config.export_include_on_hold, config.accept_links);
+    write_if_changed(&target, &content).map(|_| ())
 }
 
 #[cfg(test)]
@@ -161,7 +186,7 @@ mod tests {
             task("日付が変", Status::Backlog, Some("来週")),
             archived,
         ];
-        let out = render(&tasks, true);
+        let out = render(&tasks, true, true);
         assert!(out.starts_with(MARKER));
         assert_eq!(
             body(&out),
@@ -178,10 +203,37 @@ mod tests {
         held.on_hold_since = Some("2026-11-20T10:00:00+09:00".into());
         let tasks = vec![held];
         assert_eq!(
-            body(&render(&tasks, true)),
+            body(&render(&tasks, true, true)),
             vec!["- [/] 待ち（保留中） 📅 2026-12-01"]
         );
-        assert!(body(&render(&tasks, false)).is_empty());
+        assert!(body(&render(&tasks, false, true)).is_empty());
+    }
+
+    /// 作業名は Fubako でその作業を開くリンクになる。リンクの形を崩す文字は文字として扱わせる
+    #[test]
+    fn names_link_back_to_the_task() {
+        let mut t = task(r"見積[第2版]\控え", Status::Backlog, Some("2026-12-01"));
+        t.id = Some("1a2b3c4d-0000-4000-8000-00000000abcd".into());
+        let mut bad = task("id が変", Status::Backlog, Some("2026-12-02"));
+        bad.id = Some("a b)(x".into());
+        assert_eq!(
+            body(&render(&[t, bad], true, true)),
+            vec![
+                r"- [ ] [見積\[第2版\]\\控え](fubako://open?id=1a2b3c4d-0000-4000-8000-00000000abcd) 📅 2026-12-01",
+                "- [ ] id が変 📅 2026-12-02",
+            ]
+        );
+    }
+
+    /// リンクを受け付ける設定が無効なら、押しても開かないリンクは書かない
+    #[test]
+    fn names_are_plain_when_links_are_off() {
+        let mut t = task("見積", Status::Backlog, Some("2026-12-01"));
+        t.id = Some("1a2b3c4d".into());
+        assert_eq!(
+            body(&render(&[t], true, false)),
+            vec!["- [ ] 見積 📅 2026-12-01"]
+        );
     }
 
     /// 作業名に Tasks の印が入っていても、期限の読み違いを起こさない
@@ -189,7 +241,7 @@ mod tests {
     fn signifiers_in_names_are_removed() {
         let tasks = vec![task("📅 締め ⏫ 対応", Status::Backlog, Some("2026-12-01"))];
         assert_eq!(
-            body(&render(&tasks, true)),
+            body(&render(&tasks, true, true)),
             vec!["- [ ] 締め 対応 📅 2026-12-01"]
         );
     }
@@ -208,7 +260,7 @@ mod tests {
         fs::write(&empty, "").unwrap();
         assert!(check_target(&empty.to_string_lossy(), &config).is_ok());
         let ours = vault.path().join("ours.md");
-        fs::write(&ours, render(&[], true)).unwrap();
+        fs::write(&ours, render(&[], true, true)).unwrap();
         assert!(check_target(&ours.to_string_lossy(), &config).is_ok());
     }
 

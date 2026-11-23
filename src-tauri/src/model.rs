@@ -251,6 +251,10 @@ pub struct AppConfig {
     /// 保留中の作業も書き出すか。保留していても期限は来るので、既定は書き出す
     #[serde(default = "default_true")]
     pub export_include_on_hold: bool,
+    /// ほかのアプリやノートから fubako:// のリンクで画面を動かせるようにするか。
+    /// 外から操作される入り口なので、使う人だけが有効にする（既定は無効）
+    #[serde(default)]
+    pub accept_links: bool,
 }
 
 fn default_true() -> bool {
@@ -290,6 +294,7 @@ impl Default for AppConfig {
             deep_archive_months: default_deep_archive_months(),
             export_md: None,
             export_include_on_hold: true,
+            accept_links: false,
         }
     }
 }

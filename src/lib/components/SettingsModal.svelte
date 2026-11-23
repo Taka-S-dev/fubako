@@ -30,6 +30,7 @@
   let deepMonths = $state(initial.deep_archive_months);
   let exportMd = $state(initial.export_md ?? '');
   let exportOnHold = $state(initial.export_include_on_hold ?? true);
+  let acceptLinks = $state(initial.accept_links ?? false);
   let hotkey = $state(initial.hotkey);
   let staleDays = $state(initial.stale_days);
   let templatesText = $state(initial.template_files.join('\n'));
@@ -95,6 +96,7 @@
         deep_archive_months: Math.max(1, Number(deepMonths) || 6),
         export_md: exportMd.trim() || null,
         export_include_on_hold: exportOnHold,
+        accept_links: acceptLinks,
         hotkey: hotkey.trim(),
         stale_days: Math.max(1, Number(staleDays) || 14),
         template_files: templatesText
@@ -213,6 +215,17 @@
         <input type="checkbox" bind:checked={exportOnHold} />
         保留中の作業も書き出す
       </label>
+    </div>
+    <div class="row">
+      <span class="label">ほかのアプリからのリンク</span>
+      <label class="auto">
+        <input type="checkbox" bind:checked={acceptLinks} />
+        fubako:// のリンクを受け付ける
+      </label>
+      <p class="hint">
+        オンにすると、ほかのアプリやノートのリンクから、作業を選んで開いたり、検索欄に言葉を入れたりできます。
+        リンクでできるのは表示を変えることだけです。使わないならオフのままにしてください（オフの間はリンクの登録を消し、届いたリンクも受け取りません）
+      </p>
     </div>
     <div class="row">
       <span class="label">呼び出しホットキー</span>

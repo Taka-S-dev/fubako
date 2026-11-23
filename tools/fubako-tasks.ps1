@@ -30,11 +30,31 @@ fubako-tasks.ps1 -Name 見積 -Archived -Json
 fubako-tasks.ps1 -Create -Name 障害調査 -Due 2026-12-01 -Tags 問い合わせ,至急
 作業ディレクトリに 20261123_障害調査 のような新しい作業を作り、その id を出す。
 
+.EXAMPLE
+fubako-tasks.ps1 -OpenInApp 1a2b3c4d
+Fubako の画面でその作業を選んで、詳細を出す（fubako:// のリンクを開く）。
+
+.EXAMPLE
+fubako-tasks.ps1 -SearchInApp "見積 #調査"
+Fubako の画面の検索欄にその言葉を入れる。-WhatIf を付けると、開くリンクを見せるだけで開かない。
+
 .NOTES
-終了コード: 0 = 成功、1 = 失敗（設定が読めない、作れない等）、2 = -Id で見つからない
+終了コード: 0 = 成功、1 = 失敗（設定が読めない、作れない等）、2 = -Id や -OpenInApp で見つからない
+
+画面を動かすリンク（fubako://）は、Fubako の設定で受け付けをオンにしたときだけ使える。
+できるのは、表示を変えることだけ（作業を選ぶ、検索欄に言葉を入れる）。
+作る・書き換える・ファイルを開く操作は、リンクからは受け付けない。
 #>
-[CmdletBinding(DefaultParameterSetName = 'List')]
+[CmdletBinding(DefaultParameterSetName = 'List', SupportsShouldProcess = $true)]
 param(
+    # Fubako の画面で、この作業を選んで詳細を出す（id の全体か、先頭の8文字以上）
+    [Parameter(ParameterSetName = 'OpenInApp', Mandatory = $true)]
+    [string]$OpenInApp,
+
+    # Fubako の画面の検索欄に、この言葉を入れる（200文字まで）
+    [Parameter(ParameterSetName = 'SearchInApp', Mandatory = $true)]
+    [string]$SearchInApp,
+
     # id の全体か、先頭の8文字以上
     [Parameter(ParameterSetName = 'List')]
     [string]$Id,
@@ -397,7 +417,43 @@ if ($Help -or @($Rest | Where-Object { $_ -in @('--help', '-help', '-h', '/?', '
 }
 if ($Rest) { Stop-WithError "知らない引数です: $($Rest -join ' ')。使い方は --help で出ます" }
 
+# Fubako の画面を動かすリンクを開く。形は Fubako 側でも確かめるが、
+# ここでも同じ決まりで確かめてから組み立て、壊れたリンクを渡さない
+function Open-FubakoLink([string]$url) {
+    if (-not $PSCmdlet.ShouldProcess($url, 'Fubako で開く')) { return }
+    if (-not (Test-Path -LiteralPath 'Registry::HKEY_CLASSES_ROOT\fubako\shell\open\command')) {
+        Stop-WithError 'fubako:// のリンクが有効になっていません。Fubako の設定で「fubako:// のリンクを受け付ける」をオンにしてください'
+    }
+    Start-Process $url
+}
+
+if ($PSCmdlet.ParameterSetName -eq 'SearchInApp') {
+    $q = $SearchInApp.Trim()
+    if (-not $q) { Stop-WithError '検索語を指定してください' }
+    if ($q.Length -gt 200) { Stop-WithError '検索語は200文字までにしてください' }
+    if ($q -match '\p{Cc}') { Stop-WithError '検索語に使えない文字が入っています' }
+    Open-FubakoLink "fubako://search?q=$([Uri]::EscapeDataString($q))"
+    exit 0
+}
+
 $cfg = Read-FubakoConfig
+
+if ($PSCmdlet.ParameterSetName -eq 'OpenInApp') {
+    $needle = $OpenInApp.Trim().ToLowerInvariant()
+    if ($needle.Length -lt 8) { Stop-WithError 'id は先頭の8文字以上を指定してください' }
+    $all = Get-Tasks $cfg $true $true
+    $found = @($all | Where-Object { $_.id -and $_.id.ToLowerInvariant().StartsWith($needle) })
+    if ($found.Count -eq 0) { Stop-WithError "id が $OpenInApp の作業は見つかりません" 2 }
+    if ($found.Count -gt 1) { Stop-WithError "id が $OpenInApp で始まる作業が $($found.Count) 件あります。もっと長く指定してください" }
+    $task = $found[0]
+    if ($task.location -eq 'deep_archive') {
+        Stop-WithError 'この作業はディープアーカイブにあるため、画面では開けません。Fubako の検索から探してください'
+    }
+    # Fubako がリンクで受け付ける id の形（英数字と - と _ だけ）に収まっているか
+    if ($task.id -notmatch '^[A-Za-z0-9_-]{1,128}$') { Stop-WithError 'この作業の id はリンクに使えない形です' }
+    Open-FubakoLink "fubako://open?id=$($task.id)"
+    exit 0
+}
 
 if ($PSCmdlet.ParameterSetName -eq 'Create') {
     New-FubakoTask $cfg

@@ -149,4 +149,19 @@ export interface AppConfig {
   export_md: string | null;
   /** 保留中の作業も書き出すか */
   export_include_on_hold: boolean;
+  /**
+   * ほかのアプリやノートから fubako:// のリンクで画面を動かせるようにするか。
+   * 無効の間は登録を消し、届いたリンクも捨てる（既定は無効）
+   */
+  accept_links: boolean;
 }
+
+/**
+ * fubako:// のリンクで頼まれた表示の変更。Rust 側で形を確かめ終えたものだけが来る。
+ * リンクでできるのは表示を変えることだけで、作る・書き換える・開く操作は来ない
+ */
+export type LinkCommand = { kind: 'open'; id: string } | { kind: 'search'; q: string };
+
+export type PendingLink =
+  | { result: 'accepted'; command: LinkCommand }
+  | { result: 'rejected'; reason: string };

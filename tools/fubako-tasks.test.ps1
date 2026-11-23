@@ -101,6 +101,17 @@ try {
     Assert ($again.code -eq 1 -and $again.text -match '既にあります') '同じ名前の作業がある日は作らない'
     Assert ((Invoke-Tasks @('-Create', '-Name', 'x', '-Due', '来週')).code -eq 1) '読めない期限では作らない'
 
+    # 画面を動かすリンク（-WhatIf で組み立てだけを見る）
+    $open = Invoke-Tasks @('-OpenInApp', 'aaaaaaaa', '-WhatIf')
+    Assert ($open.code -eq 0 -and $open.text -match 'fubako://open\?id=aaaaaaaa-0000-4000-8000-000000000001') '-OpenInApp は id の先頭から作業を引き、全体の id でリンクを組む'
+    Assert ((Invoke-Tasks @('-OpenInApp', 'ffffffff', '-WhatIf')).code -eq 2) '-OpenInApp で見つからない id は終了コード 2'
+    $deepOpen = Invoke-Tasks @('-OpenInApp', 'eeeeeeee', '-WhatIf')
+    Assert ($deepOpen.code -eq 1 -and $deepOpen.text -match 'ディープアーカイブ') 'ディープアーカイブの作業は画面で開けないと断る'
+    $search = Invoke-Tasks @('-SearchInApp', '見積 #調査&x=1', '-WhatIf')
+    Assert ($search.code -eq 0 -and $search.text -match 'fubako://search\?q=%E8%A6%8B%E7%A9%8D%20%23%E8%AA%BF%E6%9F%BB%26x%3D1') '-SearchInApp は検索語を符号化してリンクに入れる（& や = で別の指定を足せない）'
+    Assert ((Invoke-Tasks @('-SearchInApp', ' ', '-WhatIf')).code -eq 1) '空の検索語は断る'
+    Assert ((Invoke-Tasks @('-SearchInApp', ('あ' * 201), '-WhatIf')).code -eq 1) '長すぎる検索語は断る'
+
     # 使い方
     $usage = Invoke-Tasks @('--help')
     Assert ($usage.code -eq 0 -and $usage.text -match '-Create' -and $usage.text -match 'id') '--help で使い方を出す'

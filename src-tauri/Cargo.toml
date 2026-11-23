@@ -26,8 +26,11 @@ chrono = { version = "0.4", features = ["serde"] }
 notify = "8"
 # 作業の id。名前を変えても移しても、外の道具が同じ作業を指せるようにする
 uuid = { version = "1", features = ["v4"] }
+url = "2"
 
 [target.'cfg(windows)'.dependencies]
+# fubako:// のリンクの登録。設定で有効にしたときだけ、今の利用者の分に書く
+windows-registry = "0.5"
 # エクスプローラーのウィンドウ列挙と、シェルのファイルアイコン取得に使う
 windows = { version = "0.61", features = [
     "Win32_Foundation",

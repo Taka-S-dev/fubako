@@ -360,6 +360,7 @@ pub async fn set_config(
     *state.config.lock().unwrap() = config.clone();
     // 書き出し先を直したら、前と同じ失敗でももう一度知らせる
     *state.export_error.lock().unwrap() = None;
+    crate::deeplink::sync_registration(config.accept_links);
     watch::restart(&app, &config);
     Ok(warning)
 }

@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
-import type { AppConfig, DeepArchiveListing, FolderListing, MetaPatch, Task } from './types';
+import type { AppConfig, DeepArchiveListing, FolderListing, MetaPatch, PendingLink, Task } from './types';
 
 /** 保存がほかの書き換えとぶつかって断られたかどうか */
 export function isConflict(e: unknown): boolean {
@@ -18,6 +18,8 @@ export const api = {
   /** 保存は成功しても伝えることがあれば文言が返る（ホットキーを取られていた等） */
   setConfig: (config: AppConfig) => invoke<string | null>('set_config', { config }),
   takeStartupWarning: () => invoke<string | null>('take_startup_warning'),
+  /** fubako:// で届いたリンクのうち、まだ受け取っていない最後の1件。読んだら消える */
+  takePendingLink: () => invoke<PendingLink | null>('take_pending_link'),
   listTasks: () => invoke<Task[]>('list_tasks'),
   /** 検索中に頼まれたときだけ呼ぶ。普段の一覧には入れない */
   listDeepArchive: () => invoke<DeepArchiveListing>('list_deep_archive'),
