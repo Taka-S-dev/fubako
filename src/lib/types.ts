@@ -53,6 +53,8 @@ export interface Task {
   /** 保留を始めた日時。null なら保留していない */
   on_hold_since: string | null;
   links: TaskLink[];
+  /** 読んだときの .todo.json の指紋。保存のときに baseRev として返す */
+  meta_rev: string;
   last_activity: string | null;
   file_count: number;
   file_names: string[];
@@ -60,19 +62,24 @@ export interface Task {
 }
 
 /**
- * 詳細パネルから保存できる項目。まとめて1つの型にしてあるので、
- * 項目が増えても呼び出し側の引数の並びが崩れない
+ * 作業の記録に保存する項目。書いた項目だけが書き換わり、書かなかった項目は
+ * ファイルにある値のまま残る。期限と手動の進捗は null で「消す」になる
  */
 export interface MetaPatch {
-  status: Status;
-  tags: string[];
-  due: string | null;
-  memo: string;
-  checklist: ChecklistItem[];
-  manualProgress: number | null;
-  progressMode: ProgressMode;
-  onHold: boolean;
-  links: TaskLink[];
+  status?: Status;
+  tags?: string[];
+  due?: string | null;
+  memo?: string;
+  checklist?: ChecklistItem[];
+  manualProgress?: number | null;
+  progressMode?: ProgressMode;
+  onHold?: boolean;
+  links?: TaskLink[];
+  /**
+   * 読んだときの指紋（Task.meta_rev）。渡すと、その後ほかで書き換えられていたとき
+   * 保存せずに 'CONFLICT' で断られる。手元の値を書き戻す保存では必ず渡す
+   */
+  baseRev?: string;
 }
 
 /** 画面の地の明暗。auto は OS の設定に従う */

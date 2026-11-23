@@ -34,6 +34,7 @@ function task(over: Partial<Task>): Task {
     completed_at: null,
     on_hold_since: null,
     links: [],
+    meta_rev: "none",
     last_activity: null,
     file_count: 0,
     file_names: [],

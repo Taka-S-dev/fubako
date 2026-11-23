@@ -27,6 +27,9 @@ pub struct ChecklistItem {
     /// 見積(分)。未入力の項目は他項目の平均（全て未入力なら均等）で重み付けされる
     #[serde(default)]
     pub estimate_min: Option<u32>,
+    /// ほかのツールが足した項目。読み書きで失わないよう、そのまま持ち回る
+    #[serde(flatten)]
+    pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
 /// フォルダに入れられない置き場所への参照。共有ドライブや
@@ -37,6 +40,9 @@ pub struct TaskLink {
     /// 表示名。空なら url をそのまま出す
     #[serde(default)]
     pub label: String,
+    /// ほかのツールが足した項目。読み書きで失わないよう、そのまま持ち回る
+    #[serde(flatten)]
+    pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
 /// 前回のウィンドウの大きさと位置。付箋として細く置いた形も次回そのまま出す
@@ -69,8 +75,19 @@ pub enum Theme {
 
 /// 各作業フォルダ内の .todo.json に保存するメタデータ。
 /// フォルダを手動で移動してもデータが追従するよう、フォルダ内に持つ。
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+/// .todo.json の形の版。項目の意味を変えるときだけ上げる。
+/// 項目を足すだけなら上げない（知らない項目は読む側が無視できる）
+pub const META_VERSION: u32 = 1;
+
+fn meta_version() -> u32 {
+    META_VERSION
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TaskMeta {
+    /// 形の版。書かれていない古いファイルは 1 とみなす
+    #[serde(default = "meta_version")]
+    pub v: u32,
     #[serde(default)]
     pub status: Status,
     #[serde(default)]
@@ -97,6 +114,29 @@ pub struct TaskMeta {
     pub on_hold_since: Option<String>,
     #[serde(default)]
     pub links: Vec<TaskLink>,
+    /// ほかのツールが足した項目。Fubako は使わないが、書き戻すときに消さない
+    #[serde(flatten)]
+    pub extra: serde_json::Map<String, serde_json::Value>,
+}
+
+impl Default for TaskMeta {
+    fn default() -> Self {
+        Self {
+            v: META_VERSION,
+            status: Status::default(),
+            tags: Vec::new(),
+            due: None,
+            memo: String::new(),
+            checklist: Vec::new(),
+            progress: None,
+            progress_mode: ProgressMode::default(),
+            created_at: None,
+            completed_at: None,
+            on_hold_since: None,
+            links: Vec::new(),
+            extra: serde_json::Map::new(),
+        }
+    }
 }
 
 /// フロントエンドへ返すタスク一件分
@@ -124,6 +164,9 @@ pub struct Task {
     pub completed_at: Option<String>,
     pub on_hold_since: Option<String>,
     pub links: Vec<TaskLink>,
+    /// 読んだときの .todo.json の中身から作った指紋。保存のときに返してもらい、
+    /// その間にほかで書き換えられていないかを確かめる
+    pub meta_rev: String,
     pub last_activity: Option<String>,
     /// フォルダ直下の項目数
     pub file_count: usize,

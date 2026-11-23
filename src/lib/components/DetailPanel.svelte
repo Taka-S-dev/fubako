@@ -45,7 +45,8 @@
     oncomplete: (t: Task) => void;
     onreopen: (t: Task) => void;
     onrename: (t: Task, name: string) => void;
-    onsave: (t: Task, patch: MetaPatch) => void;
+    /** 保存できたら新しい指紋を返す。できなければ null */
+    onsave: (t: Task, patch: MetaPatch) => Promise<string | null>;
     onopenentry: (t: Task, entry: FolderEntry) => void;
     onopenlink: (url: string) => void;
     onlinkcontext: (e: MouseEvent, link: TaskLink) => void;
@@ -88,9 +89,70 @@
     }
   });
 
+  /**
+   * 最後に読んだ、または自分で保存した .todo.json の指紋。保存のときに渡して、
+   * その間のほかでの書き換えを見分ける。表示には使わないので反応させない
+   */
+  let knownRev = '';
+  /** 保存ボタンで確定する欄の、最後に読んだ値。手元で直したかどうかの基準にする */
+  let synced = { status: 'doing' as Status, due: '', memo: '' };
+  /** 保存は1件ずつ順に送る。前の保存が返した指紋で次を比べるため */
+  let saving: Promise<void> = Promise.resolve();
+  /** ほかで書き換えられたが、手元の書きかけを残した欄の知らせ */
+  let keptNotice = $state('');
+
+  function syncDrafts() {
+    synced = { status: task.status, due: task.due ?? '', memo: task.memo };
+  }
+
+  /**
+   * 開いている作業がほかで書き換えられたときに、手元の値を取り直す。
+   * 取り直さないと、次の保存が古い値で書き戻して、ほかでの変更を黙って消す
+   */
+  function adoptOutsideChange() {
+    knownRev = task.meta_rev;
+    // その場で保存する欄は書きかけを持たないので、そのまま取り直す
+    tags = [...task.tags];
+    if (JSON.stringify(checklist) !== JSON.stringify(task.checklist)) {
+      checklist = task.checklist.map((i) => ({ ...i }));
+      // 並びが変わり得るので、行の番号で持っている編集は畳む
+      editingItem = -1;
+      busyRow = -1;
+    }
+    if (JSON.stringify(links) !== JSON.stringify(task.links)) {
+      links = task.links.map((l) => ({ ...l }));
+      editingLink = -1;
+      opening = -1;
+    }
+    manualProgress = task.manual_progress;
+    progressMode = task.progress_mode;
+    onHold = task.on_hold_since !== null;
+
+    // 保存ボタンで確定する欄は、手元で直していなければ取り直し、直していれば残す。
+    // 両方で変わっていたら、保存すると上書きすることを知らせる
+    const kept: string[] = [];
+    if (status === synced.status) status = task.status;
+    else if (task.status !== synced.status) kept.push('状態');
+    if (due === synced.due) due = task.due ?? '';
+    else if ((task.due ?? '') !== synced.due) kept.push('期限');
+    if (memo === synced.memo) memo = task.memo;
+    else if (task.memo !== synced.memo) kept.push('補足');
+    syncDrafts();
+    if (kept.length) {
+      keptNotice = `ほかで書き換えられました。${kept.join('・')}は手元の書きかけを残しています。保存すると上書きします`;
+    }
+  }
+
   $effect(() => {
-    if (task.path !== currentPath) {
+    if (task.path === currentPath) {
+      if (task.meta_rev !== knownRev) adoptOutsideChange();
+      return;
+    }
+    {
       currentPath = task.path;
+      knownRev = task.meta_rev;
+      syncDrafts();
+      keptNotice = '';
       status = task.status;
       tags = [...task.tags];
       tagInput = '';
@@ -230,7 +292,9 @@
   });
 
   function save() {
-    onsave(task, {
+    // 押した時点の値で送る。並んで待つ間に別の作業へ移っても、その値を取り違えない
+    const target = task;
+    const patch = $state.snapshot({
       status,
       tags,
       due: due || null,
@@ -240,6 +304,16 @@
       progressMode,
       onHold,
       links,
+    });
+    saving = saving.then(async () => {
+      // 待つ間に別の作業へ移っていたら、この作業の指紋は手元に無いので比べずに書く
+      const same = currentPath === target.path;
+      const rev = await onsave(target, { ...patch, baseRev: same ? knownRev : undefined });
+      if (rev && currentPath === target.path) {
+        knownRev = rev;
+        synced = { status: patch.status, due: patch.due ?? '', memo: patch.memo };
+        keptNotice = '';
+      }
     });
   }
 
@@ -715,6 +789,7 @@
     {/if}
     {#if dirty}
       <div class="save-row">
+        {#if keptNotice}<p class="kept-notice">{keptNotice}</p>{/if}
         <button class="btn primary" onclick={save}>変更を保存</button>
       </div>
     {/if}
@@ -1282,6 +1357,14 @@
   .save-row {
     display: flex;
     justify-content: flex-end;
+    align-items: center;
+    gap: 8px;
+  }
+  .kept-notice {
+    margin: 0;
+    flex: 1;
+    font-size: 12px;
+    color: var(--red);
   }
 
   /* やること */

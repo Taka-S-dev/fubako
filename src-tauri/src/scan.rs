@@ -1,4 +1,4 @@
-use crate::model::{AppConfig, Status, Task, TaskMeta};
+use crate::model::{AppConfig, Status, Task, TaskMeta, META_VERSION};
 use chrono::{DateTime, Duration, Local, NaiveDate, TimeZone};
 use std::fs;
 use std::io::Write;
@@ -7,11 +7,50 @@ use std::time::SystemTime;
 
 pub const META_FILE: &str = ".todo.json";
 
-pub fn read_meta(dir: &Path) -> TaskMeta {
-    fs::read_to_string(dir.join(META_FILE))
-        .ok()
-        .and_then(|s| serde_json::from_str(&s).ok())
-        .unwrap_or_default()
+/// 読み直すたびに別物と見なされないよう、中身だけから決まる指紋を作る。
+/// ファイルが無いときは決まった値にして、「無いまま」も比べられるようにする。
+/// 比べるのはこのプロセスの中だけなので、暗号的な強さも版をまたぐ安定も要らない
+pub fn meta_rev(bytes: Option<&[u8]>) -> String {
+    use std::hash::{DefaultHasher, Hasher};
+    match bytes {
+        None => "none".to_string(),
+        Some(b) => {
+            let mut h = DefaultHasher::new();
+            h.write(b);
+            format!("{:x}-{:016x}", b.len(), h.finish())
+        }
+    }
+}
+
+fn read_meta_bytes(dir: &Path) -> Option<Vec<u8>> {
+    fs::read(dir.join(META_FILE)).ok()
+}
+
+/// 書き戻す前の読み込み。中身と、そのときの指紋を返す。
+/// 読めない・知らない版のファイルは、書き換えると中身が失われるので断る
+pub fn load_meta(dir: &Path) -> Result<(TaskMeta, String), String> {
+    let path = dir.join(META_FILE);
+    let bytes = match fs::read(&path) {
+        Ok(b) => b,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            return Ok((TaskMeta::default(), meta_rev(None)))
+        }
+        Err(e) => return Err(format!("{} を読めません: {e}", path.display())),
+    };
+    let meta: TaskMeta = serde_json::from_slice(&bytes).map_err(|e| {
+        format!(
+            "{} の書き方が崩れているため、上書きせずに残しました（{e}）",
+            path.display()
+        )
+    })?;
+    if meta.v > META_VERSION {
+        return Err(format!(
+            "{} はこの Fubako より新しい形（v{}）のため、書き換えません",
+            path.display(),
+            meta.v
+        ));
+    }
+    Ok((meta, meta_rev(Some(&bytes))))
 }
 
 /// 一時ファイルへ書き切ってから rename で置き換えるアトミック書き込み。
@@ -40,9 +79,14 @@ pub fn atomic_write(path: &Path, data: &[u8]) -> Result<(), String> {
     Ok(())
 }
 
-pub fn write_meta(dir: &Path, meta: &TaskMeta) -> Result<(), String> {
-    let json = serde_json::to_string_pretty(meta).map_err(|e| e.to_string())?;
-    atomic_write(&dir.join(META_FILE), json.as_bytes())
+/// 書いた中身の指紋を返す。呼び出し側はこれを次の保存の基準にできる。
+/// 版は常に今のものにする（古い版を読み込めた時点で、今の形に読み替えている）
+pub fn write_meta(dir: &Path, meta: &TaskMeta) -> Result<String, String> {
+    let mut meta = meta.clone();
+    meta.v = META_VERSION;
+    let json = serde_json::to_string_pretty(&meta).map_err(|e| e.to_string())?;
+    atomic_write(&dir.join(META_FILE), json.as_bytes())?;
+    Ok(meta_rev(Some(json.as_bytes())))
 }
 
 /// フォルダ名から日付プレフィックスを切り出す (例: "20260802_調査" -> ("20260802", "調査"))
@@ -143,7 +187,12 @@ fn collect_names(dir: &Path, prefix: &str, depth: u32, out: &mut Vec<String>) ->
 pub fn scan_task(dir: &Path, archived: bool, stale_days: u32) -> Option<Task> {
     let folder_name = dir.file_name()?.to_string_lossy().to_string();
     let (date_prefix, name) = parse_folder_name(&folder_name);
-    let meta = read_meta(dir);
+    // 中身と指紋は同じ読み込みから作る。別々に読むと、その間の書き換えで食い違う
+    let bytes = read_meta_bytes(dir);
+    let meta_rev = meta_rev(bytes.as_deref());
+    let meta: TaskMeta = bytes
+        .and_then(|b| serde_json::from_slice(&b).ok())
+        .unwrap_or_default();
 
     let mut file_names = Vec::new();
     let file_count = collect_names(dir, "", 0, &mut file_names);
@@ -245,6 +294,7 @@ pub fn scan_task(dir: &Path, archived: bool, stale_days: u32) -> Option<Task> {
         completed_at: meta.completed_at,
         on_hold_since: meta.on_hold_since,
         links: meta.links,
+        meta_rev,
         last_activity,
         file_count,
         file_names,
@@ -377,18 +427,65 @@ mod tests {
         write_meta(dir.path(), &meta).unwrap();
         // 上書きしても壊れず、一時ファイルも残らない
         write_meta(dir.path(), &meta).unwrap();
-        let loaded = read_meta(dir.path());
+        let (loaded, _) = load_meta(dir.path()).unwrap();
         assert_eq!(loaded.status, Status::Doing);
         assert_eq!(loaded.tags, vec!["調査".to_string()]);
         assert!(!dir.path().join(".todo.json.tmp").exists());
     }
 
+    /// 壊れた記録でも一覧には出す。ただし書き戻す前の読み込みは断り、
+    /// 手で直している途中のファイルを初期値で上書きしない
     #[test]
-    fn broken_meta_falls_back_to_default() {
+    fn broken_meta_is_listed_but_never_overwritten() {
         let dir = tempfile::tempdir().unwrap();
         fs::write(dir.path().join(META_FILE), "{ こわれたJSON").unwrap();
-        let loaded = read_meta(dir.path());
-        assert_eq!(loaded.status, Status::Backlog);
+        let task = scan_task(dir.path(), false, 30).unwrap();
+        assert_eq!(task.status, Status::Backlog);
+        assert!(load_meta(dir.path()).is_err());
+    }
+
+    /// ほかのツールが足した項目は、Fubako が書き戻しても消えない
+    #[test]
+    fn unknown_fields_survive_a_round_trip() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(
+            dir.path().join(META_FILE),
+            r#"{"status":"doing","memo":"m","mytool":{"ref":"x"},
+               "checklist":[{"text":"a","done":false,"id":"c1"}],
+               "links":[{"url":"https://example.com","label":"","kind":"ticket"}]}"#,
+        )
+        .unwrap();
+        let (mut meta, _) = load_meta(dir.path()).unwrap();
+        assert_eq!(meta.v, META_VERSION);
+        meta.memo = "changed".into();
+        write_meta(dir.path(), &meta).unwrap();
+
+        let raw: serde_json::Value =
+            serde_json::from_slice(&fs::read(dir.path().join(META_FILE)).unwrap()).unwrap();
+        assert_eq!(raw["v"], 1);
+        assert_eq!(raw["memo"], "changed");
+        assert_eq!(raw["mytool"]["ref"], "x");
+        assert_eq!(raw["checklist"][0]["id"], "c1");
+        assert_eq!(raw["links"][0]["kind"], "ticket");
+    }
+
+    /// 自分より新しい版の記録は、知らない意味を壊さないよう書き換えない
+    #[test]
+    fn newer_version_is_not_rewritten() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join(META_FILE), r#"{"v":2,"status":"doing"}"#).unwrap();
+        assert!(load_meta(dir.path()).is_err());
+    }
+
+    /// 指紋は中身だけで決まる。書いた側が返す指紋と、一覧が読んで作る指紋が一致する
+    #[test]
+    fn rev_matches_between_write_and_scan() {
+        let dir = tempfile::tempdir().unwrap();
+        assert_eq!(scan_task(dir.path(), false, 30).unwrap().meta_rev, "none");
+        let rev = write_meta(dir.path(), &TaskMeta::default()).unwrap();
+        assert_eq!(scan_task(dir.path(), false, 30).unwrap().meta_rev, rev);
+        assert_eq!(load_meta(dir.path()).unwrap().1, rev);
+        assert_ne!(rev, "none");
     }
 
     #[test]
@@ -403,16 +500,19 @@ mod tests {
                     text: "a".into(),
                     done: true,
                     estimate_min: Some(30),
+                    extra: Default::default(),
                 },
                 ChecklistItem {
                     text: "b".into(),
                     done: true,
                     estimate_min: Some(120),
+                    extra: Default::default(),
                 },
                 ChecklistItem {
                     text: "c".into(),
                     done: false,
                     estimate_min: Some(90),
+                    extra: Default::default(),
                 },
             ],
             ..Default::default()
@@ -433,6 +533,7 @@ mod tests {
                 text: "a".into(),
                 done: true,
                 estimate_min: None,
+                extra: Default::default(),
             }],
             progress: Some(30),
             progress_mode: ProgressMode::Manual,
@@ -502,11 +603,13 @@ mod tests {
                     text: "a".into(),
                     done: true,
                     estimate_min: Some(60),
+                    extra: Default::default(),
                 },
                 ChecklistItem {
                     text: "b".into(),
                     done: false,
                     estimate_min: Some(60),
+                    extra: Default::default(),
                 },
             ],
             progress: None,

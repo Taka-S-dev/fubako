@@ -4,7 +4,7 @@
   import { getCurrentWebview } from '@tauri-apps/api/webview';
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { ask, open as openDialog } from '@tauri-apps/plugin-dialog';
-  import { api } from '$lib/api';
+  import { api, isConflict, saveErrorText } from '$lib/api';
   import { CardDrag } from '$lib/dnd.svelte';
   import { collectTags, filterTasks, hasTerms, matchHint, parseTerms } from '$lib/search';
   import { SEPARATOR, wantsNativeMenu, type MenuItem, type OpenMenu } from '$lib/menu';
@@ -405,7 +405,7 @@
     await runBulk(`を${statusLabels[status]}にしました`, targets, async (t) => {
       // アーカイブ側のものは、先に作業ディレクトリへ戻してから状態を変える
       const path = t.archived ? await api.reopenTask(t.path) : t.path;
-      await api.setTaskMeta(path, patchOf(t, status));
+      await api.setTaskMeta(path, { status });
     });
   }
 
@@ -422,11 +422,11 @@
         toast(`「${task.name}」をアーカイブへ移動しました`);
       } else if (task.archived) {
         const newPath = await api.reopenTask(task.path);
-        await api.setTaskMeta(newPath, patchOf(task, status));
+        await api.setTaskMeta(newPath, { status });
         if (selectedPath === task.path) selectedPath = newPath;
         toast(`「${task.name}」を作業ディレクトリへ戻しました`);
       } else {
-        await api.setTaskMeta(task.path, patchOf(task, status));
+        await api.setTaskMeta(task.path, { status });
       }
       await refresh();
     } catch (e) {
@@ -469,20 +469,6 @@
   }
 
   /** 今のタスクの内容をそのまま送るための下敷き。状態だけ差し替えて使う */
-  function patchOf(task: Task, status: Status): MetaPatch {
-    return {
-      status,
-      tags: task.tags,
-      due: task.due,
-      memo: task.memo,
-      checklist: task.checklist,
-      manualProgress: task.manual_progress,
-      progressMode: task.progress_mode,
-      onHold: task.on_hold_since !== null,
-      links: task.links,
-    };
-  }
-
   /**
    * 一括操作。1件ずつ試し、失敗したものだけ選択に残す。
    * 移動はファイルが開かれている等の理由で個別に失敗しうるので、
@@ -499,7 +485,7 @@
         done++;
       } catch (e) {
         failed.push(t);
-        if (!firstError) firstError = `${t.name}: ${e}`;
+        if (!firstError) firstError = `${t.name}: ${saveErrorText(e)}`;
       }
     }
     await refresh();
@@ -563,23 +549,29 @@
       return;
     }
     await runBulk(`に「${tag}」を付けました`, targets, (t) =>
-      api.setTaskMeta(t.path, { ...patchOf(t, t.status), tags: [...t.tags, tag] })
+      // 一覧の値から作ったタグ一式で上書きするので、読んだときから変わっていないことを確かめる
+      api.setTaskMeta(t.path, { tags: [...t.tags, tag], baseRev: t.meta_rev })
     );
   }
 
   async function bulkRemoveTag(tag: string) {
     const targets = markedTasks.filter((t) => t.tags.includes(tag));
     await runBulk(`から「${tag}」を外しました`, targets, (t) =>
-      api.setTaskMeta(t.path, { ...patchOf(t, t.status), tags: t.tags.filter((x) => x !== tag) })
+      api.setTaskMeta(t.path, { tags: t.tags.filter((x) => x !== tag), baseRev: t.meta_rev })
     );
   }
 
-  async function handleSaveMeta(task: Task, patch: MetaPatch) {
+  /** 保存できたら新しい指紋を返す。詳細パネルはそれを次の保存の基準にする */
+  async function handleSaveMeta(task: Task, patch: MetaPatch): Promise<string | null> {
     try {
-      await api.setTaskMeta(task.path, patch);
+      const rev = await api.setTaskMeta(task.path, patch);
       await refresh();
+      return rev;
     } catch (e) {
-      toast(String(e), 'error');
+      // ぶつかったときは最新を読み込む。詳細パネルは書きかけの欄を残して取り直す
+      if (isConflict(e)) await refresh();
+      toast(saveErrorText(e), 'error');
+      return null;
     }
   }
 

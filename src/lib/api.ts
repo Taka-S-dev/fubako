@@ -1,6 +1,18 @@
 import { invoke } from '@tauri-apps/api/core';
 import type { AppConfig, DeepArchiveListing, FolderListing, MetaPatch, Task } from './types';
 
+/** 保存がほかの書き換えとぶつかって断られたかどうか */
+export function isConflict(e: unknown): boolean {
+  return String(e) === 'CONFLICT';
+}
+
+/** 保存の失敗を、利用者に見せる文に直す */
+export function saveErrorText(e: unknown): string {
+  return isConflict(e)
+    ? 'ほかで書き換えられていたため保存しませんでした。最新の内容を読み込んだので、もう一度操作してください'
+    : String(e);
+}
+
 export const api = {
   getConfig: () => invoke<AppConfig>('get_config'),
   /** 保存は成功しても伝えることがあれば文言が返る（ホットキーを取られていた等） */
@@ -11,8 +23,12 @@ export const api = {
   listDeepArchive: () => invoke<DeepArchiveListing>('list_deep_archive'),
   createTask: (name: string, useTemplate: boolean) =>
     invoke<Task>('create_task', { name, useTemplate }),
+  /**
+   * 保存した中身の指紋を返す。続けて保存するときは、これを baseRev に渡す。
+   * 渡さなかった項目は送られない（undefined は JSON にならない）ので、ファイルの値のまま残る
+   */
   setTaskMeta: (path: string, patch: MetaPatch) =>
-    invoke<void>('set_task_meta', {
+    invoke<string>('set_task_meta', {
       path,
       patch: {
         status: patch.status,
@@ -24,6 +40,7 @@ export const api = {
         progress_mode: patch.progressMode,
         on_hold: patch.onHold,
         links: patch.links,
+        base_rev: patch.baseRev,
       },
     }),
   renameTask: (path: string, name: string) => invoke<string>('rename_task', { path, name }),

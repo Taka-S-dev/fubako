@@ -12,19 +12,122 @@ use tauri_plugin_autostart::ManagerExt as _;
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
 use tauri_plugin_opener::OpenerExt as _;
 
-/// set_task_meta のペイロード。フロントエンドから編集可能なフィールドだけを持つ
-#[derive(Debug, serde::Deserialize)]
+/// set_task_meta のペイロード。送られた項目だけを書き換え、送られなかった項目は
+/// ファイルにある値のまま残す。状態だけを変える操作が、ほかの項目を
+/// 手元の古い値で上書きしないようにするため
+#[derive(Debug, Default, serde::Deserialize)]
+#[serde(default)]
 pub struct MetaPatch {
-    pub status: Status,
-    pub tags: Vec<String>,
-    pub due: Option<String>,
-    pub memo: String,
-    pub checklist: Vec<ChecklistItem>,
-    pub manual_progress: Option<u32>,
-    pub progress_mode: ProgressMode,
+    pub status: Option<Status>,
+    pub tags: Option<Vec<String>>,
+    /// 外側の Option は「送られたか」、内側は「期限を消すか」
+    #[serde(deserialize_with = "present")]
+    pub due: Option<Option<String>>,
+    pub memo: Option<String>,
+    pub checklist: Option<Vec<ChecklistItem>>,
+    #[serde(deserialize_with = "present")]
+    pub manual_progress: Option<Option<u32>>,
+    pub progress_mode: Option<ProgressMode>,
     /// 保留にするかどうか。開始時刻は受け取らず、切り替えた側で打つ
-    pub on_hold: bool,
-    pub links: Vec<TaskLink>,
+    pub on_hold: Option<bool>,
+    pub links: Option<Vec<TaskLink>>,
+    /// 画面が読んだときの指紋（Task::meta_rev）。渡されたときは、今のファイルと
+    /// 食い違えば書かずに断る。手元の値を丸ごと書き戻す保存は必ず渡す
+    pub base_rev: Option<String>,
+}
+
+/// null が来たら「消す」、来なければ「触らない」と区別するための読み方
+fn present<'de, D, T>(d: D) -> Result<Option<Option<T>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: serde::Deserialize<'de>,
+{
+    <Option<T> as serde::Deserialize>::deserialize(d).map(Some)
+}
+
+/// 保存がほかの書き換えとぶつかったことを画面に伝える値。
+/// 画面はこれを見て読み直し、利用者に知らせる
+pub const CONFLICT: &str = "CONFLICT";
+
+/// .todo.json の「読む・比べる・書く」をアプリの中で割り込ませないための鍵。
+/// 鍵が無いと、同時に来た2つの保存が同じ指紋で比べられ、両方とも通ってしまう
+static META_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+fn meta_lock() -> std::sync::MutexGuard<'static, ()> {
+    // 鍵を持ったまま落ちても守っているデータは無いので、そのまま使う
+    META_LOCK.lock().unwrap_or_else(|e| e.into_inner())
+}
+
+/// フォルダを移したあとに記録を書き換える。記録が壊れていたら触らずに残す。
+/// 完了かどうかはフォルダの位置で決まるので、記録を書けなくても移動は成り立つ
+fn update_meta_after_move(dir: &Path, f: impl FnOnce(&mut TaskMeta)) -> Result<(), String> {
+    let _guard = meta_lock();
+    let Ok((mut meta, _)) = scan::load_meta(dir) else {
+        return Ok(());
+    };
+    f(&mut meta);
+    scan::write_meta(dir, &meta).map(|_| ())
+}
+
+fn apply_patch(meta: &mut TaskMeta, patch: MetaPatch) {
+    // 完了はフォルダの移動を伴うので complete_task だけが行う
+    if let Some(status) = patch.status.filter(|s| *s != Status::Done) {
+        meta.status = status;
+    }
+    if let Some(tags) = patch.tags {
+        meta.tags = tags;
+    }
+    if let Some(due) = patch.due {
+        meta.due = due;
+    }
+    if let Some(memo) = patch.memo {
+        meta.memo = memo;
+    }
+    if let Some(checklist) = patch.checklist {
+        meta.checklist = checklist
+            .into_iter()
+            .filter(|i| !i.text.trim().is_empty())
+            .collect();
+    }
+    if let Some(p) = patch.manual_progress {
+        meta.progress = p.map(|p| p.min(100));
+    }
+    if let Some(mode) = patch.progress_mode {
+        meta.progress_mode = mode;
+    }
+    if let Some(links) = patch.links {
+        meta.links = links
+            .into_iter()
+            .filter(|l| !l.url.trim().is_empty())
+            .map(|l| TaskLink {
+                url: l.url.trim().to_string(),
+                label: l.label.trim().to_string(),
+                extra: l.extra,
+            })
+            .collect();
+    }
+    if let Some(on_hold) = patch.on_hold {
+        // 保留の開始時刻はここで打つ。既に保留なら打ち直さず、いつからかを保つ
+        meta.on_hold_since = match (on_hold, meta.on_hold_since.take()) {
+            (true, Some(since)) => Some(since),
+            (true, None) => Some(Local::now().to_rfc3339()),
+            (false, _) => None,
+        };
+    }
+    if meta.created_at.is_none() {
+        meta.created_at = Some(Local::now().to_rfc3339());
+    }
+}
+
+/// 鍵を持った状態で、比べてから書く。書いた中身の指紋を返す
+fn save_meta_checked(dir: &Path, patch: MetaPatch) -> Result<String, String> {
+    let _guard = meta_lock();
+    let (mut meta, rev) = scan::load_meta(dir)?;
+    if patch.base_rev.as_ref().is_some_and(|base| *base != rev) {
+        return Err(CONFLICT.to_string());
+    }
+    apply_patch(&mut meta, patch);
+    scan::write_meta(dir, &meta)
 }
 
 /// 別ボリューム間の移動を示す OS エラーコード
@@ -341,47 +444,16 @@ pub async fn create_task(
     scan::scan_task(&dir, false, config.stale_days).ok_or_else(|| "作成結果の取得に失敗".into())
 }
 
+/// 保存した中身の指紋を返す。画面は次の保存でこれを base_rev に使う
 #[tauri::command]
 pub async fn set_task_meta(
     state: State<'_, AppState>,
     path: String,
     patch: MetaPatch,
-) -> Result<(), String> {
+) -> Result<String, String> {
     let config = state.config.lock().unwrap().clone();
     let dir = ensure_managed(Path::new(&path), &config)?;
-    let mut meta = scan::read_meta(&dir);
-    if patch.status != Status::Done {
-        meta.status = patch.status;
-    }
-    meta.tags = patch.tags;
-    meta.due = patch.due;
-    meta.memo = patch.memo;
-    meta.checklist = patch
-        .checklist
-        .into_iter()
-        .filter(|i| !i.text.trim().is_empty())
-        .collect();
-    meta.progress = patch.manual_progress.map(|p| p.min(100));
-    meta.progress_mode = patch.progress_mode;
-    meta.links = patch
-        .links
-        .into_iter()
-        .filter(|l| !l.url.trim().is_empty())
-        .map(|l| TaskLink {
-            url: l.url.trim().to_string(),
-            label: l.label.trim().to_string(),
-        })
-        .collect();
-    // 保留の開始時刻はここで打つ。既に保留なら打ち直さず、いつからかを保つ
-    meta.on_hold_since = match (patch.on_hold, meta.on_hold_since.take()) {
-        (true, Some(since)) => Some(since),
-        (true, None) => Some(Local::now().to_rfc3339()),
-        (false, _) => None,
-    };
-    if meta.created_at.is_none() {
-        meta.created_at = Some(Local::now().to_rfc3339());
-    }
-    scan::write_meta(&dir, &meta)
+    save_meta_checked(&dir, patch)
 }
 
 /// フォルダ名の日付プレフィックスを維持したまま作業名部分だけ差し替える
@@ -461,10 +533,10 @@ fn complete(src: &Path, config: &AppConfig) -> Result<PathBuf, String> {
     let dest = unique_dest(&year_dir, &folder_name);
     move_dir(src, &dest)?;
 
-    let mut meta = scan::read_meta(&dest);
-    meta.status = Status::Done;
-    meta.completed_at = Some(Local::now().to_rfc3339());
-    scan::write_meta(&dest, &meta)?;
+    update_meta_after_move(&dest, |meta| {
+        meta.status = Status::Done;
+        meta.completed_at = Some(Local::now().to_rfc3339());
+    })?;
     Ok(dest)
 }
 
@@ -484,10 +556,10 @@ pub async fn reopen_task(state: State<'_, AppState>, path: String) -> Result<Str
 
     // 戻し終えてから記録を消す。先に消すと、移動に失敗したとき
     // アーカイブに残ったフォルダから完了日だけが失われる
-    let mut meta = scan::read_meta(&dest);
-    meta.status = Status::Doing;
-    meta.completed_at = None;
-    scan::write_meta(&dest, &meta)?;
+    update_meta_after_move(&dest, |meta| {
+        meta.status = Status::Doing;
+        meta.completed_at = None;
+    })?;
     Ok(dest.to_string_lossy().to_string())
 }
 
@@ -585,14 +657,14 @@ pub async fn import_task(state: State<'_, AppState>, path: String) -> Result<Tas
     let dest = unique_dest(&root, &folder_name);
     move_dir(&src, &dest)?;
 
-    let mut meta = scan::read_meta(&dest);
-    meta.status = Status::Doing;
-    // 退避したものを戻す場合は完了日が残っている。作業中なのに完了日を持つ状態にしない
-    meta.completed_at = None;
-    if meta.created_at.is_none() {
-        meta.created_at = Some(Local::now().to_rfc3339());
-    }
-    scan::write_meta(&dest, &meta)?;
+    update_meta_after_move(&dest, |meta| {
+        meta.status = Status::Doing;
+        // 退避したものを戻す場合は完了日が残っている。作業中なのに完了日を持つ状態にしない
+        meta.completed_at = None;
+        if meta.created_at.is_none() {
+            meta.created_at = Some(Local::now().to_rfc3339());
+        }
+    })?;
     scan::scan_task(&dest, false, config.stale_days)
         .ok_or_else(|| "取り込み結果の取得に失敗".to_string())
 }
@@ -1230,7 +1302,7 @@ mod tests {
 
         // フォルダは作業側に残り、状態も完了日も動いていない
         assert!(task.exists());
-        let meta = scan::read_meta(&task);
+        let (meta, _) = scan::load_meta(&task).unwrap();
         assert_eq!(meta.status, Status::Doing);
         assert!(meta.completed_at.is_none());
     }
@@ -1261,5 +1333,100 @@ mod tests {
         // ルート自身と外は、読む側でも通さない
         assert!(ensure_readable(&deep, &config).is_err());
         assert!(ensure_readable(&dir.path().join("outside"), &config).is_err());
+    }
+
+    /// 読んだあとにほかで書き換えられていたら、古い手元の値で上書きしない
+    #[test]
+    fn stale_save_is_refused() {
+        let dir = tempfile::tempdir().unwrap();
+        let rev = scan::write_meta(dir.path(), &TaskMeta::default()).unwrap();
+
+        // 画面が開いている間に、エディタがやることを足した
+        let (mut outside, _) = scan::load_meta(dir.path()).unwrap();
+        outside.checklist.push(ChecklistItem {
+            text: "足した".into(),
+            done: false,
+            estimate_min: None,
+            extra: Default::default(),
+        });
+        scan::write_meta(dir.path(), &outside).unwrap();
+
+        let stale = MetaPatch {
+            memo: Some("画面の補足".into()),
+            checklist: Some(vec![]),
+            base_rev: Some(rev),
+            ..Default::default()
+        };
+        assert_eq!(save_meta_checked(dir.path(), stale).unwrap_err(), CONFLICT);
+        let (meta, _) = scan::load_meta(dir.path()).unwrap();
+        assert_eq!(meta.checklist.len(), 1);
+        assert_eq!(meta.memo, "");
+    }
+
+    /// 最新の指紋なら保存でき、返された指紋で続けて保存できる
+    #[test]
+    fn fresh_saves_chain_on_returned_rev() {
+        let dir = tempfile::tempdir().unwrap();
+        let rev = scan::write_meta(dir.path(), &TaskMeta::default()).unwrap();
+        let next = save_meta_checked(
+            dir.path(),
+            MetaPatch {
+                memo: Some("1".into()),
+                base_rev: Some(rev),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        save_meta_checked(
+            dir.path(),
+            MetaPatch {
+                memo: Some("2".into()),
+                base_rev: Some(next),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(scan::load_meta(dir.path()).unwrap().0.memo, "2");
+    }
+
+    /// 送られた項目だけを変える。状態だけの変更が、補足や期限を巻き戻さない
+    #[test]
+    fn partial_patch_touches_only_sent_fields() {
+        let dir = tempfile::tempdir().unwrap();
+        let meta = TaskMeta {
+            memo: "残す".into(),
+            due: Some("2026-12-01".into()),
+            tags: vec!["t".into()],
+            ..Default::default()
+        };
+        scan::write_meta(dir.path(), &meta).unwrap();
+        let patch: MetaPatch = serde_json::from_str(r#"{"status":"doing"}"#).unwrap();
+        save_meta_checked(dir.path(), patch).unwrap();
+        let (meta, _) = scan::load_meta(dir.path()).unwrap();
+        assert_eq!(meta.status, Status::Doing);
+        assert_eq!(meta.memo, "残す");
+        assert_eq!(meta.due.as_deref(), Some("2026-12-01"));
+        assert_eq!(meta.tags, vec!["t".to_string()]);
+
+        // null は「消す」、書かれていなければ「触らない」
+        let patch: MetaPatch = serde_json::from_str(r#"{"due":null}"#).unwrap();
+        save_meta_checked(dir.path(), patch).unwrap();
+        assert_eq!(scan::load_meta(dir.path()).unwrap().0.due, None);
+    }
+
+    /// 壊れた記録には、指紋を渡さない保存でも書き込まない
+    #[test]
+    fn broken_meta_is_not_overwritten_by_save() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join(META_FILE), "{ 途中").unwrap();
+        let patch = MetaPatch {
+            status: Some(Status::Doing),
+            ..Default::default()
+        };
+        assert!(save_meta_checked(dir.path(), patch).is_err());
+        assert_eq!(
+            fs::read_to_string(dir.path().join(META_FILE)).unwrap(),
+            "{ 途中"
+        );
     }
 }
