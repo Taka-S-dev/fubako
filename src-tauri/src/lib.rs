@@ -6,6 +6,7 @@ mod ids;
 mod model;
 mod ops;
 mod scan;
+mod tools;
 mod tray;
 mod watch;
 mod window;
@@ -46,6 +47,10 @@ pub fn run() {
         )
         .setup(|app| {
             let cfg = config::load(app.handle());
+            // 置けなくてもアプリは動く。次の起動でまた試す
+            if let Some(dir) = config::app_dir(app.handle()) {
+                let _ = tools::install(&dir);
+            }
             // リリースビルドには標準エラー出力が無いため、画面へ渡せるよう持っておく
             let warning = ops::register_hotkey(app.handle(), &cfg.hotkey)
                 .err()

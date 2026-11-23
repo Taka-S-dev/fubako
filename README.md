@@ -219,7 +219,9 @@ npm run tauri build  # インストーラー作成 (src-tauri/target/release/bun
 一致するものを探します。`id` の無い作業には Fubako が一覧を読むときに振ります。エクスプローラーで
 フォルダごと複製して `id` が重なったときは、フォルダの作成日時が古いほうに残し、写しのほうを振り直します。
 ほかの道具が新しい作業フォルダを作るときは、自分で UUID を作って `id` に入れておけば、作ったその場で
-その作業を指せます。
+その作業を指せます。作るときは `.` で始まる名前のフォルダに `.todo.json` まで書き切ってから、作業の名前に
+変えてください。Fubako は `.` で始まるフォルダを読まないので、`.todo.json` の無いフォルダを先に見つけて
+別の `id` を振ってしまうことがありません（下の `fubako-tasks.ps1 -Create` はこの手順で作ります）。
 
 表にないキーは、Fubako が書き戻しても消えずに残ります（`checklist` と `links` の各要素の中も同じです）。
 ほかの道具が自分用の項目を足す場合は、ほかと重ならないよう、道具の名前を付けたキーにしてください
@@ -228,6 +230,38 @@ npm run tauri build  # インストーラー作成 (src-tauri/target/release/bun
 このファイルを読めば、他の道具からタスクの一覧を作れます。Fubako 側に道具ごとの連携機能は
 置いていません。形式が公開されていれば、それぞれの道具の側で好きな形にできるためです。
 例外は、自分では読みに来られない道具向けの期限の書き出しだけです（次の節）。
+
+### ほかの道具から使う（`tools/fubako-tasks.ps1`）
+
+アプリを開かずに作業を探して読むための PowerShell スクリプトです。スクリプトやコマンドを実行できる
+AI エージェント、タスクスケジューラー、ほかのアプリから使えます。Windows PowerShell 5.1 で動き、
+設定は Fubako と同じ `%APPDATA%\Fubako\config.json` から読みます。
+
+Fubako は起動のたびに、このスクリプトを設定の隣の `%APPDATA%\Fubako\tools\fubako-tasks.ps1` に置きます。
+置き場所は exe をどこに置いても変わりません。アプリと一緒に更新されるので、
+`.todo.json` の形とずれません（手で書き換えても、次の起動で戻ります）。使い方は `--help` で出ます。
+
+```powershell
+# 作業中の作業を、期限切れ・今日まで・3日以内・放置・保留・そのほかに分けて出す
+powershell -NoProfile -ExecutionPolicy Bypass -File fubako-tasks.ps1
+
+# id（先頭8文字以上）で1件の詳細を出す。名前を変えてもアーカイブへ移しても見つかる
+powershell -NoProfile -ExecutionPolicy Bypass -File fubako-tasks.ps1 -Id 1a2b3c4d
+
+# 名前の一部で探す。-Archived でアーカイブ、-Deep でディープアーカイブも含める
+powershell -NoProfile -ExecutionPolicy Bypass -File fubako-tasks.ps1 -Name 見積 -Archived
+
+# 新しい作業を作り、その id を出す
+powershell -NoProfile -ExecutionPolicy Bypass -File fubako-tasks.ps1 -Create -Name 障害調査 -Due 2026-12-01 -Tags 問い合わせ,至急
+```
+
+- `-Json` を付けると、プログラム向けに JSON で出します（1件でも配列）。項目は `id`・`name`・`path`・
+  `location`（`work` / `archive` / `deep_archive`）・`status`・`due`・`days_until_due`・`checklist_open`・
+  `idle_days`・`stale` などです
+- 今ある `.todo.json` は書き換えません。期限ややることを変えるのは Fubako の画面で行います。
+  書き換えを Fubako だけにしておけば、画面で開いている内容とぶつかりません
+- 終了コードは 0 = 成功、1 = 失敗、2 = `-Id` で見つからない、です
+- 詳しい引数は `Get-Help .\fubako-tasks.ps1 -Detailed` で見られます
 
 ### 期限の書き出し
 

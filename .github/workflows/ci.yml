@@ -50,3 +50,8 @@ jobs:
       - name: Test
         working-directory: src-tauri
         run: cargo test
+
+      # ほかの道具向けのスクリプト。利用者の手元と同じ Windows PowerShell 5.1 で確かめる
+      - name: Tools test
+        shell: powershell
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File tools/fubako-tasks.test.ps1

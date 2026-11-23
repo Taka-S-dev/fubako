@@ -7,9 +7,13 @@ use tauri::{AppHandle, Manager};
 /// `app_config_dir()` は逆ドメイン形式の識別子をそのままフォルダ名にするため、
 /// 製品名でフォルダが並ぶ Windows の %APPDATA% では浮いてしまう。
 /// フォルダ名は productName から取り、設定と表記がずれないようにする
-fn config_path(app: &AppHandle) -> Option<PathBuf> {
+pub fn app_dir(app: &AppHandle) -> Option<PathBuf> {
     let dir = app.path().config_dir().ok()?;
-    Some(dir.join(&app.package_info().name).join("config.json"))
+    Some(dir.join(&app.package_info().name))
+}
+
+fn config_path(app: &AppHandle) -> Option<PathBuf> {
+    Some(app_dir(app)?.join("config.json"))
 }
 
 pub fn load(app: &AppHandle) -> AppConfig {

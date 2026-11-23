@@ -22,6 +22,8 @@
 !/src/
 !/static/
 !/src-tauri/
+# アプリを開かずに作業を扱う、ほかの道具向けのスクリプト
+!/tools/
 
 # src-tauri 配下の生成物は除外
 /src-tauri/target/
