@@ -32,6 +32,8 @@ export interface TaskLink {
 }
 
 export interface Task {
+  /** 作業の id。名前を変えても移しても変わらない。振られる前の一瞬だけ null */
+  id: string | null;
   path: string;
   folder_name: string;
   name: string;

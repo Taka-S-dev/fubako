@@ -88,6 +88,10 @@ pub struct TaskMeta {
     /// 形の版。書かれていない古いファイルは 1 とみなす
     #[serde(default = "meta_version")]
     pub v: u32,
+    /// 作業を指す id。一度振ったら変えない。名前を変えてもアーカイブへ移しても
+    /// .todo.json と一緒に動くので、外の道具はパスではなくこれで作業を覚える
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
     #[serde(default)]
     pub status: Status,
     #[serde(default)]
@@ -123,6 +127,7 @@ impl Default for TaskMeta {
     fn default() -> Self {
         Self {
             v: META_VERSION,
+            id: None,
             status: Status::default(),
             tags: Vec::new(),
             due: None,
@@ -142,6 +147,8 @@ impl Default for TaskMeta {
 /// フロントエンドへ返すタスク一件分
 #[derive(Debug, Clone, Serialize)]
 pub struct Task {
+    /// 作業の id。まだ振られていなければ None（一覧を読んだときに振られる）
+    pub id: Option<String>,
     pub path: String,
     pub folder_name: String,
     pub name: String,

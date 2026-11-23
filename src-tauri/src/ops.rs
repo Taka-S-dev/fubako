@@ -53,7 +53,7 @@ pub const CONFLICT: &str = "CONFLICT";
 /// 鍵が無いと、同時に来た2つの保存が同じ指紋で比べられ、両方とも通ってしまう
 static META_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
-fn meta_lock() -> std::sync::MutexGuard<'static, ()> {
+pub(crate) fn meta_lock() -> std::sync::MutexGuard<'static, ()> {
     // 鍵を持ったまま落ちても守っているデータは無いので、そのまま使う
     META_LOCK.lock().unwrap_or_else(|e| e.into_inner())
 }
@@ -368,7 +368,10 @@ pub async fn take_startup_warning(state: State<'_, AppState>) -> Result<Option<S
 #[tauri::command]
 pub async fn list_tasks(state: State<'_, AppState>) -> Result<Vec<Task>, String> {
     let config = state.config.lock().unwrap().clone();
-    Ok(scan::scan_all(&config))
+    let mut tasks = scan::scan_all(&config);
+    // ディープアーカイブは書き換えない境界なので、振るのは普段の一覧だけ
+    crate::ids::reconcile(&mut tasks);
+    Ok(tasks)
 }
 
 /// ディープアーカイブから読む件数の上限。何年分も溜まっても固まらないようにする
@@ -436,6 +439,8 @@ pub async fn create_task(
     }
 
     let meta = TaskMeta {
+        // 作ったその場で振る。画面に返す作業が最初から id を持つ
+        id: Some(crate::ids::new_id()),
         status: Status::Doing,
         created_at: Some(Local::now().to_rfc3339()),
         ..Default::default()

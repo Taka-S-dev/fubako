@@ -24,6 +24,8 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 chrono = { version = "0.4", features = ["serde"] }
 notify = "8"
+# 作業の id。名前を変えても移しても、外の道具が同じ作業を指せるようにする
+uuid = { version = "1", features = ["v4"] }
 
 [target.'cfg(windows)'.dependencies]
 # エクスプローラーのウィンドウ列挙と、シェルのファイルアイコン取得に使う

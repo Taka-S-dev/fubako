@@ -274,6 +274,8 @@ pub fn scan_task(dir: &Path, archived: bool, stale_days: u32) -> Option<Task> {
     };
 
     Some(Task {
+        // 空の id は振られていないのと同じに扱う。外の道具が空で書いても重複しない
+        id: meta.id.filter(|id| !id.trim().is_empty()),
         path: dir.to_string_lossy().to_string(),
         folder_name,
         name,
