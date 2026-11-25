@@ -47,7 +47,9 @@ fn linked_name(name: &str, id: Option<&str>) -> String {
 }
 
 /// 書き出す中身を作る。期限があり、まだ終わっていない、作業側の作業だけを期限の順に並べる。
-/// 作業中は `[/]`、未着手は `[ ]`。どちらも Tasks プラグインの書き方では「終わっていない」と読まれる
+/// 印は作業中も未着手も `[ ]` にする。Obsidian の標準の見た目では `[ ]` 以外の印（作業中の
+/// `[/]` など）がチェック済みの箱になり、終わっていない作業が終わったように見えてしまう。
+///
 /// `with_links` が真なら、作業名を Fubako でその作業を開くリンクにする。
 /// リンクを受け付ける設定が無効なら押しても開かないので、名前だけを書く
 pub fn render(tasks: &[Task], include_on_hold: bool, with_links: bool) -> String {
@@ -66,7 +68,6 @@ pub fn render(tasks: &[Task], include_on_hold: bool, with_links: bool) -> String
 
     let mut out = String::from(HEADER);
     for (due, name, t) in rows {
-        let mark = if t.status == Status::Doing { '/' } else { ' ' };
         let hold = if t.on_hold_since.is_some() {
             "（保留中）"
         } else {
@@ -77,7 +78,7 @@ pub fn render(tasks: &[Task], include_on_hold: bool, with_links: bool) -> String
         } else {
             name
         };
-        out.push_str(&format!("- [{mark}] {name}{hold} 📅 {due}\n"));
+        out.push_str(&format!("- [ ] {name}{hold} 📅 {due}\n"));
     }
     out
 }
@@ -192,7 +193,7 @@ mod tests {
             body(&out),
             vec![
                 "- [ ] 障害調査 📅 2026-11-28",
-                "- [/] 見積もり作成 📅 2026-12-03",
+                "- [ ] 見積もり作成 📅 2026-12-03",
             ]
         );
     }
@@ -204,7 +205,7 @@ mod tests {
         let tasks = vec![held];
         assert_eq!(
             body(&render(&tasks, true, true)),
-            vec!["- [/] 待ち（保留中） 📅 2026-12-01"]
+            vec!["- [ ] 待ち（保留中） 📅 2026-12-01"]
         );
         assert!(body(&render(&tasks, false, true)).is_empty());
     }
