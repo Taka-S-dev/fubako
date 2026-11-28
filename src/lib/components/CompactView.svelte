@@ -7,12 +7,15 @@
     pinned,
     ontogglepin,
     onopen,
+    oncontext,
   }: {
     tasks: Task[];
     pinned: boolean;
     ontogglepin: () => void;
     /** 行を押したときの動作。付箋から作業へ入る唯一の経路 */
     onopen: (t: Task) => void;
+    /** 行の右クリック。フォルダのほかに、参照もここから開ける */
+    oncontext: (e: MouseEvent, t: Task) => void;
   } = $props();
 
   // 付箋に出すのは今動いている作業だけ。未着手はまだ始まっておらず、
@@ -64,7 +67,10 @@
             class="row"
             class:held={task.on_hold_since}
             onclick={() => onopen(task)}
-            title="{task.folder_name}&#10;クリックでエクスプローラーを開く"
+            oncontextmenu={(e) => oncontext(e, task)}
+            title="{task.folder_name}&#10;クリックでエクスプローラーを開く{task.links.length
+              ? '\n右クリックで参照を開く'
+              : ''}"
           >
             <span class="name">{task.name}</span>
             {#if task.on_hold_since}

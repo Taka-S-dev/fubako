@@ -6,6 +6,8 @@ export interface MenuAction {
   action: () => void;
   /** 取り消しにくい操作。赤で描く */
   danger?: boolean;
+  /** マウスを乗せたときに出す文。長い名前を詰めて描くときに、全体をここで読ませる */
+  title?: string;
 }
 
 export type MenuItem = MenuAction | typeof SEPARATOR;

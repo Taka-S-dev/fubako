@@ -8,6 +8,7 @@
   import { CardDrag } from '$lib/dnd.svelte';
   import { collectTags, filterTasks, hasTerms, matchHint, parseTerms } from '$lib/search';
   import { SEPARATOR, wantsNativeMenu, type MenuItem, type OpenMenu } from '$lib/menu';
+  import { linkLabel } from '$lib/links';
   import type { AppConfig, CalendarViewState, DeepArchiveListing, FolderEntry, FolderListing, ListViewState, MetaPatch, SavedFilter, Status, Task, TaskLink, Theme, ViewName } from '$lib/types';
   import BoardView from '$lib/components/BoardView.svelte';
   import BulkBar from '$lib/components/BulkBar.svelte';
@@ -644,7 +645,7 @@
   function placesMenu(e: MouseEvent) {
     const items: MenuItem[] = [];
     const add = (label: string, path: string | null | undefined) => {
-      if (path) items.push({ label, action: () => handleOpenLink(path, true) });
+      if (path) items.push({ label, title: path, action: () => handleOpenLink(path, true) });
     };
     add('作業ディレクトリ', config?.work_root);
     add('アーカイブ', config?.archive_root);
@@ -761,6 +762,24 @@
         },
       },
     ]);
+  }
+
+  /**
+   * 付箋の行の右クリック。詳細の欄を出す幅が無いので、参照はここから開く。
+   * 開き方は詳細の欄と同じで、プログラムを指していれば実行の前に確かめる
+   */
+  function compactMenu(e: MouseEvent, task: Task) {
+    const items: MenuItem[] = [
+      { label: 'エクスプローラーで開く', action: () => handleOpen(task) },
+      { label: 'パスをコピー', action: () => handleCopyPath(task) },
+    ];
+    if (task.links.length) {
+      items.push(SEPARATOR);
+      for (const link of task.links) {
+        items.push({ label: linkLabel(link), title: link.url, action: () => handleOpenLink(link.url) });
+      }
+    }
+    openMenu(e, items);
   }
 
   function handleOpenEntry(task: Task, entry: FolderEntry) {
@@ -1030,7 +1049,13 @@
 <div class="app">
   <!-- 脇に置ける幅まで縮めたときは、置き場所に合った表示へ入れ替える -->
   {#if compact}
-    <CompactView tasks={filtered} {pinned} ontogglepin={togglePinned} onopen={handleOpen} />
+    <CompactView
+      tasks={filtered}
+      {pinned}
+      ontogglepin={togglePinned}
+      onopen={handleOpen}
+      oncontext={compactMenu}
+    />
   {:else}
     <TopBar
       bind:this={topBar}

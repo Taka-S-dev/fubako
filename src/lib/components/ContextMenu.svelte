@@ -84,6 +84,7 @@
         role="menuitem"
         class:danger={item.danger}
         class:active={index === highlight}
+        title={item.title}
         onmouseenter={() => (highlight = index)}
         onclick={() => run(item)}
       >
@@ -100,6 +101,8 @@
     position: fixed;
     z-index: 80;
     min-width: 176px;
+    /* 狭い窓でも横にはみ出さない。長い名前は項目の側で詰める */
+    max-width: min(320px, calc(100vw - 12px));
     padding: 4px;
     background: var(--surface);
     border: 1px solid var(--line-strong);
@@ -123,6 +126,9 @@
     border-radius: 5px;
     font-size: 12.5px;
     color: var(--ink);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   button.active {
     background: var(--manila-soft);
